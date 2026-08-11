@@ -1,135 +1,131 @@
-# Plant3D - Custom Scripts para Racores Swagelok
+# Plant3D - Custom Scripts para Racores y Componentes
 
-Scripts de Python para AutoCAD Plant 3D que definen componentes personalizados de racores para tubo.
+Repositorio oficial de scripts Python para **AutoCAD Plant 3D 2027** que definen geometrías paramétricas y puertos de conexión 3D para componentes y racores personalizados.
 
-## Requisitos
+---
 
-- AutoCAD Plant 3D 2026 o superior
-- Python (version incluida en Plant3D, verificar con `python "import sys; print(sys.version)"`)
+## 📍 Ubicación Oficial de Trabajo
 
-## Estructura
+En **AutoCAD Plant 3D 2027**, la ruta oficial de ejecución para scripts personalizados se define en `ContentConfig.xml` (`<NativeContentCustomScriptsPath>`):
 
-```
-plant3d/
-├── custom_scripts/          # Scripts Python
-│   ├── primitives/          # Formas basicas
-│   ├── straight/            # Uniones rectas
-│   ├── elbows/              # Codos
-│   ├── tees/                # Tes
-│   ├── crosses/             # Cruces
-│   ├── plugs/               # Tapones
-│   ├── adapters/            # Adaptadores
-│   └── utils.py             # Funciones comunes
-├── equipment_packages/      # Paquetes .peqx
-├── images/                  # Imagenes de referencia
-├── config/                  # Configuracion
-└── docs/                    # Documentacion
+```text
+C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts\
 ```
 
-## Instalacion
+Este repositorio Git está configurado e inicializado **directamente en esa ruta**, por lo que cualquier cambio en los archivos `.py` se aplicará en AutoCAD Plant 3D inmediatamente al ejecutar el comando de registro.
 
-1. Copiar la carpeta `custom_scripts/` a:
-   ```
-   C:\ProgramData\Autodesk\Plant 3D 20XX\CustomScripts\
-   ```
+---
 
-2. Abrir AutoCAD Plant 3D
+## 📂 Estructura del Repositorio
 
-3. Cargar el adapter de pruebas:
-   ```
-   arxload "PnP3DACPAdapter.arx"
-   ```
+> **Importante**: Para que el compilador de Plant 3D (`varmain`) registre los scripts automáticamente, cada componente `.py` debe estar colocado directamente en la raíz de `CustomScripts/`.
 
-4. Registrar los scripts:
-   ```
-   PLANTREGISTERCUSTOMSCRIPTS
-   ```
-
-5. Reiniciar Plant3D para liberar scripts de memoria
-
-## Pruebas
-
-Para probar un script especifico:
-
-```
-TESTACPSCRIPT "SIMPLE_CYLINDER"
-TESTACPSCRIPT "SIMPLE_BOX"
-TESTACPSCRIPT "SIMPLE_UNION"
+```text
+C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts\
+├── .git/                      # Control de versiones Git
+├── .gitignore                 # Filtros de archivos temporales/XML
+├── README.md                  # Documentación principal
+│
+├── simple_cylinder.py         # Cilindro sólido paramétrico
+├── simple_box.py              # Caja sólida paramétrica
+├── simple_sphere.py           # Esfera sólida paramétrica
+├── hollow_cylinder.py         # Cilindro hueco (tubo) con corte
+├── simple_elbow_90.py         # Codo 90° curvo con TORUS y 2 puertos
+├── simple_tee.py              # T con derivación (branch) y 3 puertos
+├── simple_union.py            # Unión recta para tubo con 2 puertos
+├── utils.py                   # Funciones de validación y conversión
+└── __init__.py                # Inicializador del paquete (sin imports relativos)
 ```
 
-## Desarrollo
+---
 
-### Entorno de desarrollo (recomendado)
+## 🚀 Instalación y Registro en AutoCAD Plant 3D
 
-Crear botones en Tool Palette con estos macros:
+### 1. Agregar la Ruta a Support Paths (Solo la primera vez)
+1. En AutoCAD Plant 3D, escribe el comando `OP` (Options) y presiona Enter.
+2. Ve a la pestaña **Files** $\rightarrow$ **Support File Search Path**.
+3. Haz clic en **Add** $\rightarrow$ **Browse** y selecciona:
+   `C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts`
+4. Haz clic en **Apply** y **OK**.
 
-| Accion | Macro |
-|--------|-------|
-| Cargar adapter | `^C^C(arxload "PnP3dACPAdapter.arx");` |
-| Registrar scripts | `^C^C(arxload "PnP3DAcpadapter.arx");PLANTREGISTERCUSTOMSCRIPTS;` |
-| Registrar y reiniciar | `^C^CPLANTREGISTERCUSTOMSCRIPTS;(startapp "C:/Program Files/Autodesk/AutoCAD Plant 3D 20XX/acad.exe");QUIT` |
-| Probar script | `^C^C(TESTACPSCRIPT "NOMBRE_SCRIPT")` |
+### 2. Registrar los Scripts
+En la línea de comandos de AutoCAD Plant 3D, ejecuta:
+```text
+PLANTREGISTERCUSTOMSCRIPTS
+```
 
-### Validar sintaxis
+### 3. Probar un Componente en Pantalla
+Para probar y renderizar una entidad 3D en la consola de AutoCAD:
+```lisp
+(TESTACPSCRIPT "SIMPLE_CYLINDER")
+(TESTACPSCRIPT "SIMPLE_ELBOW_90")
+(TESTACPSCRIPT "SIMPLE_TEE")
+(TESTACPSCRIPT "SIMPLE_UNION")
+```
+
+---
+
+## 💻 Flujo de Trabajo en Git
+
+Para subir tus avances a GitHub ([`jp3d-code/plant3d`](https://github.com/jp3d-code/plant3d.git)):
+
+Abre la terminal de comandos o PowerShell en `C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts`:
 
 ```bash
-python3 -c "
-import ast
-with open('custom_scripts/primitives/simple_cylinder.py') as f:
-    ast.parse(f.read())
-print('OK')
-"
+# 1. Verificar archivos modificados o nuevos
+git status
+
+# 2. Agregar cambios al área de preparación (stage)
+git add .
+
+# 3. Guardar el commit con mensaje descriptivo
+git commit -m "feat: agregar componente racor XYZ con puertos 3D"
+
+# 4. Enviar a GitHub
+git push origin main
 ```
 
-### Tipos de parametros
+---
 
-| Tipo | Descripcion | Ejemplo |
-|------|-------------|---------|
-| `LENGTH` | Longitud, debe ser > 0 | `D=LENGTH` |
-| `d0` | Longitud, puede ser 0 | `OF=d0` |
-| `d-` | Offset, puede ser negativo | `X=d-` |
-| `a` | Angulo en grados | `ANGLE` |
-| `r` | Numero sin dimension | `N=r` |
-| `b` | Booleano true/false | `FLAG=b` |
+## 📐 Estructura del Código y Puertos 3D
 
-### Decoradores
+Cada script de componente debe seguir esta estructura base usando `varmain.custom` y `varmain.primitiv`:
 
 ```python
+from varmain.primitiv import *
+from varmain.custom import *
+from math import *
+
 @activate(
-    Group="Primitives",
-    TooltipShort="Nombre corto",
-    TooltipLong="Descripcion larga",
-    LengthUnit="in"  # o "mm"
+    Group="Elbows",
+    TooltipShort="Codo 90",
+    TooltipLong="Codo de 90 grados con 2 puertos",
+    LengthUnit="in"  # "in" o "mm"
 )
-@group("Categoria")
-@param(D=LENGTH, TooltipShort="Parametro D")
-def MI_SCRIPT(s, D=48, **kw):
-    # Codigo aqui
+@group("MainDimensions")
+@param(OD=LENGTH, TooltipShort="Diámetro exterior")
+@param(L=LENGTH, TooltipShort="Centro a extremo")
+@param(T=LENGTH, TooltipShort="Espesor de pared")
+def MI_COMPONENTE(s, OD=1, L=2, T=0.1, **kw):
+    R1 = L
+    R2 = OD / 2
+    
+    # 1. Dibujar Geometría
+    s = TORUS(s, R1=R1, R2=R2, A=90)
+    
+    # 2. Definir Puertos (Puntos y Vectores de Conexión)
+    s.setPoint(1, (-R1, 0, 0))
+    s.setVector(1, (-1, 0, 0))
+    
+    s.setPoint(2, (0, R1, 0))
+    s.setVector(2, (0, 1, 0))
+    
     return s
 ```
 
-## Scripts disponibles
+---
 
-### Primitivos
-- `simple_cylinder.py` - Cilindro solido
-- `simple_box.py` - Caja solida
-- `simple_sphere.py` - Esfera solida
-- `hollow_cylinder.py` - Cilindro hueco (tubo)
+## 📝 Notas de Depuración
 
-### Racores
-- `simple_union.py` - Union recta
-- `simple_elbow_90.py` - Codo 90°
-- `simple_tee.py` - T simple
-
-## Notas importantes
-
-- Plant3D no libera scripts de memoria. Reiniciar para actualizar cambios.
-- El nombre de la funcion debe coincidir con el nombre del archivo en mayusculas.
-- Usar `s` como primer parametro y retorno del script.
-- Los scripts importan de `varmain.primitiv` y `varmain.custom` (solo disponibles en Plant3D).
-
-## Referencias
-
-- [AU Class PD1746: Scripting Components for AutoCAD Plant 3D](https://www.autodesk.com/autodesk-university/class/Scripting-Components-for-AutoCAD-Plant-3D)
-- [Custom Python Scripting for AutoCAD Plant 3D (Parts 1-4)](https://www.autodesk.com/autodesk-university/)
-- Catálogo Swagelok MS-01-23ES
+- **Sin importaciones relativas**: Los archivos `__init__.py` dentro del repositorio deben estar vacíos o sin expresiones como `from .module import *` para evitar errores de `exec_module` durante la compilación de `varmain`.
+- **Filtro de archivos temporales**: El archivo `.gitignore` ignora automáticamente los archivos `.xml` y `.map` generados durante la compilación de `PLANTREGISTERCUSTOMSCRIPTS`.
