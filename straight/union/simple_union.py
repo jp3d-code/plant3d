@@ -10,7 +10,8 @@ from math import *
     Group="Straight",
     TooltipShort="Simple Union",
     TooltipLong="Connects two tubes of the same diameter in a straight line",
-    LengthUnit="in"
+    LengthUnit="in",
+    Ports="2"
 )
 @group("MainDimensions")
 @param(OD=LENGTH, TooltipShort="Outside diameter of tube")
@@ -18,15 +19,13 @@ from math import *
 @param(T=LENGTH, TooltipShort="Wall thickness")
 def SIMPLE_UNION(s, OD=1, L=2, T=0.1, **kw):
     R = OD / 2
-    
-    s = CYLINDER(s, R=R, H=L)
-    
+
+    union = CYLINDER(s, R=R, H=L)
+
     # Puerto 1 (Entrada)
-    s.setPoint(1, (0, 0, 0))
-    s.setVector(1, (0, 0, -1))
-    
+    s.setPoint((0, 0, 0), (0, 0, -1), 0)
+
     # Puerto 2 (Salida)
-    s.setPoint(2, (0, 0, L))
-    s.setVector(2, (0, 0, 1))
-    
+    s.setPoint((0, 0, L), (0, 0, 1), 0)
+
     return s

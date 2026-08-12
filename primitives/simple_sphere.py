@@ -10,12 +10,12 @@ from math import *
     Group="Primitives",
     TooltipShort="Simple Sphere",
     TooltipLong="A solid sphere with configurable radius",
-    LengthUnit="in"
+    LengthUnit="in",
+    Ports="1"
 )
 @group("MainDimensions")
 @param(R=LENGTH, TooltipShort="Radius of the sphere")
 def SIMPLE_SPHERE(s, R=2, **kw):
-    s = SPHERE(s, R=R)
-    s.setPoint((0, 0, 0))
-    s.setVector((0, 0, 1))
+    sphere = SPHERE(s, R=R)
+    s.setPoint((0, 0, 0), (0, 0, 1), 0)
     return s

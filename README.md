@@ -144,7 +144,8 @@ from math import *
     Group="Elbows",
     TooltipShort="Codo 90",
     TooltipLong="Codo de 90 grados con 2 puertos",
-    LengthUnit="in"  # "in" o "mm"
+    LengthUnit="in",   # "in" o "mm"
+    Ports="2"          # Numero de puertos de conexion
 )
 @group("MainDimensions")
 @param(OD=LENGTH, TooltipShort="Diámetro exterior")
@@ -157,12 +158,12 @@ def MI_COMPONENTE(s, OD=1, L=2, T=0.1, **kw):
     # 1. Dibujar geometría
     s = TORUS(s, R1=R1, R2=R2, A=90)
 
-    # 2. Definir puertos (puntos y vectores de conexión)
-    s.setPoint(1, (-R1, 0, 0))
-    s.setVector(1, (-1, 0, 0))
+    # 2. Definir puertos: setPoint(punto, vector, angulo) SIN numero de puerto.
+    #    El orden de las llamadas define los puertos 1, 2, 3... y el total debe
+    #    coincidir con Ports= en @activate.
+    s.setPoint((-R1, 0, 0), (-1, 0, 0), 0)
 
-    s.setPoint(2, (0, R1, 0))
-    s.setVector(2, (0, 1, 0))
+    s.setPoint((0, R1, 0), (0, 1, 0), 0)
 
     return s
 ```

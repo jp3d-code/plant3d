@@ -10,7 +10,8 @@ from math import *
     Group="Tees",
     TooltipShort="Simple Tee",
     TooltipLong="Connects three tubes in T configuration",
-    LengthUnit="in"
+    LengthUnit="in",
+    Ports="3"
 )
 @group("MainDimensions")
 @param(OD=LENGTH, TooltipShort="Outside diameter of main tube")
@@ -19,26 +20,24 @@ from math import *
 @param(T=LENGTH, TooltipShort="Wall thickness")
 def SIMPLE_TEE(s, OD=1, L=4, H=2, T=0.1, **kw):
     R = OD / 2
-    
-    # Tubo principal (Linea corrida)
-    s = CYLINDER(s, R=R, H=L)
-    
-    # Derivación (Branch)
+
+    # Tubo principal (Linea corrida), centrado en Z
+    main = CYLINDER(s, R=R, H=L)
+    main.translate((0, 0, -L/2))
+
+    # Derivacion (Branch): sale del centro del main hacia +X
     branch = CYLINDER(s, R=R, H=H)
     branch.rotateY(90)
-    s.join(branch)
+    main.uniteWith(branch)
     branch.erase()
-    
-    # Puerto 1 (Entrada principal)
-    s.setPoint(1, (0, 0, 0))
-    s.setVector(1, (0, 0, -1))
-    
-    # Puerto 2 (Salida principal)
-    s.setPoint(2, (0, 0, L))
-    s.setVector(2, (0, 0, 1))
-    
-    # Puerto 3 (Derivación)
-    s.setPoint(3, (H, 0, L/2))
-    s.setVector(3, (1, 0, 0))
-    
+
+    # Puerto 1 (Entrada principal, extremo inferior)
+    s.setPoint((0, 0, -L/2), (0, 0, -1), 0)
+
+    # Puerto 2 (Salida principal, extremo superior)
+    s.setPoint((0, 0, L/2), (0, 0, 1), 0)
+
+    # Puerto 3 (Derivacion, extremo de la rama)
+    s.setPoint((H, 0, 0), (1, 0, 0), 0)
+
     return s

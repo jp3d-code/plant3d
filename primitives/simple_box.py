@@ -10,14 +10,14 @@ from math import *
     Group="Primitives",
     TooltipShort="Simple Box",
     TooltipLong="A solid box with configurable length, width and height",
-    LengthUnit="in"
+    LengthUnit="in",
+    Ports="1"
 )
 @group("MainDimensions")
 @param(X=LENGTH, TooltipShort="Length (X axis)")
 @param(Y=LENGTH, TooltipShort="Width (Y axis)")
 @param(Z=LENGTH, TooltipShort="Height (Z axis)")
 def SIMPLE_BOX(s, X=4, Y=4, Z=4, **kw):
-    s = BOX(s, X=X, Y=Y, Z=Z)
-    s.setPoint((0, 0, 0))
-    s.setVector((0, 0, 1))
+    box = BOX(s, X=X, Y=Y, Z=Z)
+    s.setPoint((0, 0, 0), (0, 0, 1), 0)
     return s

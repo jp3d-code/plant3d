@@ -10,13 +10,13 @@ from math import *
     Group="Primitives",
     TooltipShort="Simple Cylinder",
     TooltipLong="A solid cylinder with configurable radius and height",
-    LengthUnit="in"
+    LengthUnit="in",
+    Ports="1"
 )
 @group("MainDimensions")
 @param(R=LENGTH, TooltipShort="Radius of the cylinder")
 @param(H=LENGTH, TooltipShort="Height of the cylinder")
 def SIMPLE_CYLINDER(s, R=2, H=4, **kw):
-    s = CYLINDER(s, R=R, H=H)
-    s.setPoint((0, 0, 0))
-    s.setVector((0, 0, 1))
+    cylinder = CYLINDER(s, R=R, H=H)
+    s.setPoint((0, 0, 0), (0, 0, 1), 0)
     return s

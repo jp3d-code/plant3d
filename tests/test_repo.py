@@ -28,7 +28,7 @@ class TestComponentes(unittest.TestCase):
         for name, src in self.components.items():
             text = src.read_text(encoding="utf-8")
             self.assertIn("setPoint", text, f"{name} no define puertos (setPoint)")
-            self.assertIn("setVector", text, f"{name} no define vectores (setVector)")
+            self.assertIn("Ports=", text, f"{name} no declara Ports= en @activate")
 
     def test_todos_tienen_activate(self):
         for name, src in self.components.items():

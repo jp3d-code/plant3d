@@ -10,7 +10,8 @@ from math import *
     Group="Primitives",
     TooltipShort="Hollow Cylinder",
     TooltipLong="A hollow cylinder (tube) with outer radius, inner radius and height",
-    LengthUnit="in"
+    LengthUnit="in",
+    Ports="1"
 )
 @group("MainDimensions")
 @param(RO=LENGTH, TooltipShort="Outer radius")
@@ -20,10 +21,9 @@ def HOLLOW_CYLINDER(s, RO=3, RI=2, H=4, **kw):
     if RI >= RO:
         raise ValueError("Inner radius must be less than outer radius")
     
-    s = CYLINDER(s, R=RO, H=H)
+    s_outer = CYLINDER(s, R=RO, H=H)
     hole = CYLINDER(s, R=RI, H=H)
-    s.cut(hole)
+    s_outer.subtractFrom(hole)
     hole.erase()
-    s.setPoint((0, 0, 0))
-    s.setVector((0, 0, 1))
+    s.setPoint((0, 0, 0), (0, 0, 1), 0)
     return s
