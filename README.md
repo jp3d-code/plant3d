@@ -155,18 +155,96 @@ def MI_COMPONENTE(s, OD=1, L=2, T=0.1, **kw):
     R1 = L
     R2 = OD / 2
 
-    # 1. Dibujar geometría
-    s = TORUS(s, R1=R1, R2=R2, A=90)
+    # 1. Dibujar geometría.
+    #    NOTA: TORUS(s, R1, R2) crea un toro COMPLETO (no acepta angulo A).
+    #    Para un arco/codo usa la primitiva nativa ARC3D2(s, D, D2, R, A),
+    #    donde D/D2 son los radios de los extremos, R el radio de curvatura
+    #    y A el angulo en grados. El objeto devuelto expone pointAt(i) y
+    #    directionAt(i) con los extremos del arco.
+    #    IMPORTANTE: los parametros de geometria SIEMPRE van por nombre
+    #    (ARC3D2(s, D=..., D2=..., R=..., A=...)), nunca posicionales.
+    elbow = ARC3D2(s, D=R2, D2=R2, R=R1, A=90)
 
     # 2. Definir puertos: setPoint(punto, vector, angulo) SIN numero de puerto.
     #    El orden de las llamadas define los puertos 1, 2, 3... y el total debe
     #    coincidir con Ports= en @activate.
-    s.setPoint((-R1, 0, 0), (-1, 0, 0), 0)
+    s.setPoint(elbow.pointAt(0), elbow.directionAt(0), 0)
 
-    s.setPoint((0, R1, 0), (0, 1, 0), 0)
+    s.setPoint(elbow.pointAt(1), elbow.directionAt(1), 0)
 
     return s
 ```
+
+> **Primitivas comunes (verificadas en varmain de Plant 3D 2027):**
+> - `CYLINDER(s, R, H, O)` — cilindro, `O` = offset sobre el eje.
+> - `BOX(s, L, W, H)` — caja (¡no usa `X`, `Y`, `Z`!).
+> - `SPHERE(s, R)`, `TORUS(s, R1, R2)` — esfera y toro completo.
+> - `ARC3D2(s, D, D2, R, A)` — arco/codo con extremos `pointAt(i)` / `directionAt(i)`.
+> - Métodos de sólido: `translate((x,y,z))`, `rotateX/Y/Z(ang)`, `uniteWith(o)`, `subtractFrom(o)`, `erase()`.
+
+---
+
+## Referencia de la API `varmain` (verificada en Plant 3D 2027)
+
+Esta referencia fue validada contra el `varmain` real de la instalación (descompilando
+`variants.zip` → `varmain/primitiv.pyc`, `var_basic.pyc`, `arcsub/cpbsub/cpb.pyc`) y
+probando en pantalla con `TESTACPSCRIPT`. Es la fuente de verdad de este repositorio.
+
+### Regla de oro: argumentos por nombre (keyword args)
+
+Todas las primitivas nativas aceptan `s` como único argumento posicional; los parámetros
+de geometría **siempre** van con nombre:
+
+```python
+CYLINDER(s, R=2, H=4, O=0)   # OK
+BOX(s, L=4, W=4, H=4)        # OK
+ARC3D2(s, D=1, D2=1, R=2, A=90)  # OK
+
+ARC3D2(s, 1, 1, 2, 90)       # ERROR: TypeError "p3dprimitive() takes exactly 1 argument (5 given)"
+BOX(s, X=4, Y=4, Z=4)        # ERROR: RuntimeError eInvalidInput
+```
+
+### Primitivas disponibles
+
+| Primitiva | Firma | Notas |
+|---|---|---|
+| `CYLINDER` | `(s, R, H, O)` | `O` = offset del cilindro sobre su eje |
+| `BOX` | `(s, L, W, H)` | **No usa** `X`, `Y`, `Z` |
+| `SPHERE` | `(s, R)` | |
+| `HALFSPHERE` | `(s, R)` | Media esfera (usada por el SPHERE nativo) |
+| `TORUS` | `(s, R1, R2)` | **Siempre toro completo.** NO acepta ángulo → no sirve para codos |
+| `ARC3D2` | `(s, D, D2, R, A)` | Arco/codo: `D`/`D2` = radios de los extremos, `R` = radio de curvatura (centro a centro), `A` = ángulo en grados. Devuelve objeto con `pointAt(0/1)` y `directionAt(0/1)` |
+
+### Métodos de los sólidos
+
+Encadenables después de crear la primitiva:
+
+```python
+CYLINDER(s, R=2, H=4).rotateY(90).translate((5, 0, 0))
+```
+
+- `translate((x, y, z))`
+- `rotateX(ang)`, `rotateY(ang)`, `rotateZ(ang)` — ángulo en grados
+- `uniteWith(otro)` — unión booleana (luego `otro.erase()`)
+- `subtractFrom(otro)` — resta booleana (luego `otro.erase()`)
+- `erase()`
+
+### Puertos de conexión
+
+- `s.setPoint(punto, vector)` o `s.setPoint(punto, vector, angulo)`.
+- **Sin número de puerto**: el orden de las llamadas define los puertos 1, 2, 3...
+- El total debe coincidir con `Ports=` en `@activate`.
+- Para arcos, nunca inventar las posiciones: usar el objeto devuelto por la primitiva
+  (`elbow.pointAt(0)`, `elbow.directionAt(0)`).
+
+### Errores típicos y su solución
+
+| Síntoma | Causa | Solución |
+|---|---|---|
+| `RuntimeError: eInvalidInput` en `BOX` | Se usaron `X`/`Y`/`Z` | Usar `L`/`W`/`H` |
+| "Solo veo una dona" (toro completo) | `TORUS(..., A=90)` no existe | Usar `ARC3D2(s, D=..., D2=..., R=..., A=...)` |
+| `TypeError: p3dprimitive() takes exactly 1 argument` | Parámetros posicionales en primitiva nativa | Pasar todo por nombre |
+| Puerto no coincide con la geometría | Posición del puerto calculada "a mano" | Usar `pointAt`/`directionAt` del objeto primitiva |
 
 ---
 

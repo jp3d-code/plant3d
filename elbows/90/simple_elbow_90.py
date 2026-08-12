@@ -18,16 +18,18 @@ from math import *
 @param(L=LENGTH, TooltipShort="Center to end dimension")
 @param(T=LENGTH, TooltipShort="Wall thickness")
 def SIMPLE_ELBOW_90(s, OD=1, L=2, T=0.1, **kw):
-    R1 = L       # Radio de curvatura
+    R1 = L       # Radio de curvatura (centro a centro)
     R2 = OD / 2  # Radio exterior del tubo
-    
-    # Codo curvo de 90 grados
-    elbow = TORUS(s, R1=R1, R2=R2, A=90)
-    
+    if R1 <= R2:
+        R1 = R2 + 0.0001
+
+    # Codo curvo de 90 grados (ARC3D2 genera el arco real de codo)
+    elbow = ARC3D2(s, D=R2, D2=R2, R=R1, A=90)
+
     # Puerto 1 (Entrada)
-    s.setPoint((-R1, 0, 0), (-1, 0, 0), 0)
-    
+    s.setPoint(elbow.pointAt(0), elbow.directionAt(0), 0)
+
     # Puerto 2 (Salida a 90 grados)
-    s.setPoint((0, R1, 0), (0, 1, 0), 0)
-    
+    s.setPoint(elbow.pointAt(1), elbow.directionAt(1), 0)
+
     return s
