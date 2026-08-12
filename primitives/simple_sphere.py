@@ -16,4 +16,6 @@ from math import *
 @param(R=LENGTH, TooltipShort="Radius of the sphere")
 def SIMPLE_SPHERE(s, R=2, **kw):
     s = SPHERE(s, R=R)
+    s.setPoint((0, 0, 0))
+    s.setVector((0, 0, 1))
     return s

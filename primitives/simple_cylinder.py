@@ -17,4 +17,6 @@ from math import *
 @param(H=LENGTH, TooltipShort="Height of the cylinder")
 def SIMPLE_CYLINDER(s, R=2, H=4, **kw):
     s = CYLINDER(s, R=R, H=H)
+    s.setPoint((0, 0, 0))
+    s.setVector((0, 0, 1))
     return s

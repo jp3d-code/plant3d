@@ -1,5 +1,5 @@
 """
-Union simple para tubo.
+Union simple para tubo con puertos.
 Conecta dos tubos del mismo diametro en linea recta.
 """
 from varmain.primitiv import *
@@ -20,5 +20,13 @@ def SIMPLE_UNION(s, OD=1, L=2, T=0.1, **kw):
     R = OD / 2
     
     s = CYLINDER(s, R=R, H=L)
+    
+    # Puerto 1 (Entrada)
+    s.setPoint(1, (0, 0, 0))
+    s.setVector(1, (0, 0, -1))
+    
+    # Puerto 2 (Salida)
+    s.setPoint(2, (0, 0, L))
+    s.setVector(2, (0, 0, 1))
     
     return s

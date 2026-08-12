@@ -18,4 +18,6 @@ from math import *
 @param(Z=LENGTH, TooltipShort="Height (Z axis)")
 def SIMPLE_BOX(s, X=4, Y=4, Z=4, **kw):
     s = BOX(s, X=X, Y=Y, Z=Z)
+    s.setPoint((0, 0, 0))
+    s.setVector((0, 0, 1))
     return s
