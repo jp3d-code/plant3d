@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT))
 import build
 
 SOURCES = list(ROOT.glob("*.py")) + [
-    p for sub in build.SOURCE_DIRS for p in (ROOT / sub).rglob("*.py")
+    p for p in build.FAMILIES_DIR.rglob("*.py")
     if p.name not in ("__init__.py",) and build.GENERATED_PREFIX
     not in p.read_text(encoding="utf-8", errors="ignore")
 ]
@@ -50,20 +50,19 @@ class TestBuild(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_outputs_tienen_marcador(self):
-        for name in build.iter_components():
-            out = build.output_path(ROOT, name)
+        for name, src in build.iter_components().items():
+            out = build.output_path(ROOT, src)
             self.assertTrue(out.exists(), f"Falta output aplanado {out.name}")
             self.assertIn(build.GENERATED_PREFIX, out.read_text(encoding="utf-8"),
                           f"{out.name} no fue generado por build.py")
 
     def test_fuentes_sin_marcador(self):
-        for sub in build.SOURCE_DIRS:
-            for p in (ROOT / sub).rglob("*.py"):
-                if p.name == "__init__.py":
-                    continue
-                self.assertNotIn(build.GENERATED_PREFIX,
-                                 p.read_text(encoding="utf-8", errors="ignore"),
-                                 f"Fuente {p} tiene marcador de generado")
+        for p in build.FAMILIES_DIR.rglob("*.py"):
+            if p.name == "__init__.py":
+                continue
+            self.assertNotIn(build.GENERATED_PREFIX,
+                             p.read_text(encoding="utf-8", errors="ignore"),
+                             f"Fuente {p} tiene marcador de generado")
 
 
 if __name__ == "__main__":

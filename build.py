@@ -21,27 +21,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 
-# Carpeta base para fuentes (una por familia de componentes).
-SOURCE_DIRS = [
-    "adapters",
-    "crosses",
-    "elbows",
-    "female",
-    "male",
-    "plugs",
-    "primitives",
-    "special",
-    "straight",
-    "tees",
-    "vent_protectors",
-]
+FAMILIES_DIR = ROOT / "src" / "families"
+LIB_DIR = ROOT / "src" / "lib"
+
+SOURCE_DIRS = [d.name for d in FAMILIES_DIR.iterdir() if d.is_dir()] if FAMILIES_DIR.exists() else []
 
 # Archivos de la raiz que nunca se consideran output generado.
 PROTECTED = {
     "__init__.py",
     "build.py",
-    "utils.py",
     "README.md",
+    "AGENTS.md",
     ".gitignore",
     "requirements.txt",
     "pyproject.toml",
@@ -95,31 +85,34 @@ def find_registration_name(path):
 def iter_components(root=ROOT):
     """Devuelve {nombre_registrable: Path} para cada componente fuente."""
     components = {}
-    for sub in SOURCE_DIRS:
-        base = root / sub
-        if not base.is_dir():
+    families_dir = root / "src" / "families"
+    if not families_dir.is_dir():
+        return components
+    for path in sorted(families_dir.rglob("*.py")):
+        if path.name in ("__init__.py",) or path.name.startswith("_"):
             continue
-        for path in sorted(base.rglob("*.py")):
-            if path.name in ("__init__.py",) or path.name.startswith("_"):
-                continue
-            if GENERATED_PREFIX in path.read_text(encoding="utf-8", errors="ignore"):
-                continue
-            name = find_registration_name(path)
-            if name in components:
-                raise BuildError(
-                    f"Nombre registrable duplicado: {name}\n"
-                    f"  -> {components[name]}\n"
-                    f"  -> {path}\n"
-                    "Cada componente debe tener un nombre de funcion unico."
-                )
-            components[name] = path
+        if GENERATED_PREFIX in path.read_text(encoding="utf-8", errors="ignore"):
+            continue
+        name = find_registration_name(path)
+        if name in components:
+            raise BuildError(
+                f"Nombre registrable duplicado: {name}\n"
+                f"  -> {components[name]}\n"
+                f"  -> {path}\n"
+                "Cada componente debe tener un nombre de funcion unico."
+            )
+        components[name] = path
     if not components:
         raise BuildError("No se encontraron componentes en las subcarpetas.")
     return components
 
 
-def output_path(root, name):
-    return root / f"{name.lower()}.py"
+def output_path(root, src_path):
+    families_dir = root / "src" / "families"
+    rel = src_path.relative_to(families_dir)
+    family = rel.parts[0]
+    stem = src_path.stem
+    return root / f"{family}.{stem}.py"
 
 
 def list_generated_in_root(root=ROOT):
@@ -133,9 +126,9 @@ def list_generated_in_root(root=ROOT):
     return generated
 
 
-def expected_content(root, name, src):
-    header = GENERATED_MARKER.format(src=src.relative_to(root).as_posix())
-    body = src.read_text(encoding="utf-8").rstrip()
+def expected_content(root, src_path):
+    header = GENERATED_MARKER.format(src=src_path.relative_to(root).as_posix())
+    body = src_path.read_text(encoding="utf-8").rstrip()
     return f"{header}\n{body}\n"
 
 
@@ -159,23 +152,39 @@ def sync_gitignore(root=ROOT, generated_names=()):
     gi_path.write_text(newline.join(lines) + newline, encoding="utf-8")
 
 
-def _collisions(generated_names):
-    """Nombres registrables cuyo output colisiona con un archivo protegido."""
-    return [n for n in generated_names if output_path(ROOT, n).name in PROTECTED]
+def get_lib_files(root=ROOT):
+    """Devuelve la lista de archivos lib en src/lib que deben ser copiados."""
+    lib_dir = root / "src" / "lib"
+    if not lib_dir.is_dir():
+        return []
+    return [p for p in lib_dir.glob("*.py") if p.name != "__init__.py"]
+
+
+def _collisions(output_names):
+    """Archivos cuyo output colisiona con un archivo protegido."""
+    return [name for name in output_names if name in PROTECTED]
 
 
 def collect_errors(root=ROOT):
     """Devuelve la lista de errores de sincronizacion raiz <-> subcarpetas."""
     components = iter_components(root)
-    generated_names = sorted(components)
-    output_names = {output_path(root, n).name for n in generated_names}
+    lib_files = get_lib_files(root)
+    
+    expected_outputs = {}
+    for name, src in components.items():
+        expected_outputs[output_path(root, src).name] = expected_content(root, src)
+    
+    for lib_src in lib_files:
+        expected_outputs[lib_src.name] = expected_content(root, lib_src)
+        
+    output_names = set(expected_outputs.keys())
 
     errors = []
-    for name, src in components.items():
-        out = output_path(root, name)
+    for out_name, content in expected_outputs.items():
+        out = root / out_name
         if not out.exists():
             errors.append(f"Falta output aplanado: {out.name} (ejecuta python build.py)")
-        elif out.read_text(encoding="utf-8") != expected_content(root, name, src):
+        elif out.read_text(encoding="utf-8") != content:
             errors.append(f"Output desactualizado: {out.name} (ejecuta python build.py)")
 
     stale = [p for p in list_generated_in_root(root) if p.name not in output_names]
@@ -183,11 +192,9 @@ def collect_errors(root=ROOT):
         names = ", ".join(p.name for p in stale)
         errors.append(f"Outputs obsoletos en raiz: {names} (ejecuta python build.py)")
 
-    for name in _collisions(generated_names):
-        out = output_path(root, name)
+    for name in _collisions(output_names):
         errors.append(
-            f"El componente '{name}' generaria '{out.name}', un archivo protegido. "
-            "Renombralo."
+            f"Un archivo generaria '{name}', un archivo protegido. Renombralo."
         )
     return errors
 
@@ -195,13 +202,20 @@ def collect_errors(root=ROOT):
 def flatten(root=ROOT):
     """Aplana los componentes de las subcarpetas a la raiz."""
     components = iter_components(root)
-    generated_names = sorted(components)
-    output_names = {output_path(root, n).name for n in generated_names}
+    lib_files = get_lib_files(root)
 
-    for name in _collisions(generated_names):
+    expected_outputs = {}
+    for name, src in components.items():
+        expected_outputs[output_path(root, src).name] = (src, expected_content(root, src))
+    
+    for lib_src in lib_files:
+        expected_outputs[lib_src.name] = (lib_src, expected_content(root, lib_src))
+        
+    output_names = list(expected_outputs.keys())
+
+    for name in _collisions(output_names):
         raise BuildError(
-            f"El componente '{name}' generaria '{output_path(root, name).name}', "
-            "un archivo protegido. Renombralo."
+            f"Un archivo generaria '{name}', un archivo protegido. Renombralo."
         )
 
     for p in list_generated_in_root(root):
@@ -209,13 +223,12 @@ def flatten(root=ROOT):
             p.unlink()
             print(f"Eliminado: {p.name}")
 
-    for name, src in components.items():
-        output_path(root, name).write_text(
-            expected_content(root, name, src), encoding="utf-8"
-        )
-        print(f"Aplanado: {src.relative_to(root)} -> {output_path(root, name).name}")
+    for out_name, (src, content) in expected_outputs.items():
+        out = root / out_name
+        out.write_text(content, encoding="utf-8")
+        print(f"Aplanado: {src.relative_to(root)} -> {out.name}")
 
-    sync_gitignore(root, (output_path(root, n).name for n in generated_names))
+    sync_gitignore(root, output_names)
     return components
 
 
@@ -231,17 +244,24 @@ def main():
             errors = collect_errors(ROOT)
             if errors:
                 raise SystemExit("\n".join("[CHECK FAIL] " + e for e in errors))
-            count = len(iter_components(ROOT))
-            print(f"[OK] {count} componentes validados, raiz sincronizada.")
+            components = iter_components(ROOT)
+            lib_files = get_lib_files(ROOT)
+            count = len(components) + len(lib_files)
+            print(f"[OK] {count} archivos validados, raiz sincronizada.")
             return
 
         components = iter_components(ROOT)
-        print("Componentes encontrados:")
+        lib_files = get_lib_files(ROOT)
+        print("Archivos encontrados:")
         for name in sorted(components):
             print(f"  {name:<20} -> {components[name].relative_to(ROOT)}")
+        for lib_src in lib_files:
+            print(f"  [lib] {lib_src.name:<16} -> {lib_src.relative_to(ROOT)}")
 
-        stale = [p for p in list_generated_in_root(ROOT)
-                 if p.name not in {output_path(ROOT, n).name for n in components}]
+        output_names = {output_path(ROOT, src).name for src in components.values()}
+        output_names.update(lib_src.name for lib_src in lib_files)
+        
+        stale = [p for p in list_generated_in_root(ROOT) if p.name not in output_names]
         if stale:
             print("\nOutputs obsoletos que se eliminaran:")
             for p in stale:

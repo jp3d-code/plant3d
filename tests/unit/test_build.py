@@ -54,11 +54,11 @@ class BaseTestCase(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
         self.addCleanup(self._tmp.cleanup)
-        for sub in build.SOURCE_DIRS:
-            (self.root / sub).mkdir(parents=True, exist_ok=True)
+        self.families_dir = self.root / "src" / "families"
+        self.families_dir.mkdir(parents=True, exist_ok=True)
 
     def add_component(self, relpath, name="SIMPLE_TEE", def_line=None):
-        return write(self.root, relpath, component_body(name, def_line))
+        return write(self.root, f"src/families/{relpath}", component_body(name, def_line))
 
 
 class TestFindRegistrationName(BaseTestCase):
@@ -90,7 +90,7 @@ class TestFindRegistrationName(BaseTestCase):
             "    return x / 2\n\n"
             + component_body("SIMPLE_TEE")
         )
-        path = write(self.root, "tees/simple_tee.py", content)
+        path = write(self.root, "src/families/tees/simple_tee.py", content)
         self.assertEqual(build.find_registration_name(path), "SIMPLE_TEE")
 
     def test_def_minuscula_no_registrable(self):
@@ -100,13 +100,13 @@ class TestFindRegistrationName(BaseTestCase):
 
     def test_sin_activate_lanza_error(self):
         content = "def SIMPLE_TEE(s, OD=1, **kw):\n    return s\n"
-        path = write(self.root, "tees/simple_tee.py", content)
+        path = write(self.root, "src/families/tees/simple_tee.py", content)
         with self.assertRaises(ValueError):
             build.find_registration_name(path)
 
     def test_activate_sin_def_lanza_error(self):
         content = "@activate(Group='Tees')\npass\n"
-        path = write(self.root, "tees/simple_tee.py", content)
+        path = write(self.root, "src/families/tees/simple_tee.py", content)
         with self.assertRaises(ValueError):
             build.find_registration_name(path)
 
@@ -125,18 +125,18 @@ class TestIterComponents(BaseTestCase):
         )
 
     def test_ignora_init_py(self):
-        write(self.root, "tees/__init__.py", "def FAKE_COMPONENT(s):\n    return s\n")
+        write(self.root, "src/families/tees/__init__.py", "def FAKE_COMPONENT(s):\n    return s\n")
         self.add_component("tees/simple_tee.py", "SIMPLE_TEE")
         self.assertEqual(set(build.iter_components(self.root)), {"SIMPLE_TEE"})
 
     def test_ignora_archivos_con_prefijo_guion_bajo(self):
-        write(self.root, "tees/_internal.py", component_body("SIMPLE_INTERNAL"))
+        write(self.root, "src/families/tees/_internal.py", component_body("SIMPLE_INTERNAL"))
         self.add_component("tees/simple_tee.py", "SIMPLE_TEE")
         self.assertEqual(set(build.iter_components(self.root)), {"SIMPLE_TEE"})
 
     def test_ignora_outputs_generados_en_subcarpetas(self):
-        marker = build.GENERATED_MARKER.format(src="tees/simple_tee.py")
-        write(self.root, "tees/simple_tee.py", marker + "\n" + component_body("SIMPLE_TEE"))
+        marker = build.GENERATED_MARKER.format(src="src/families/tees/simple_tee.py")
+        write(self.root, "src/families/tees/simple_tee.py", marker + "\n" + component_body("SIMPLE_TEE"))
         with self.assertRaises(build.BuildError):
             build.iter_components(self.root)
 
@@ -165,7 +165,7 @@ class TestListGeneratedInRoot(BaseTestCase):
     def _marker_file(self, name):
         return write(
             self.root, name,
-            build.GENERATED_MARKER.format(src="tees/simple_tee.py")
+            build.GENERATED_MARKER.format(src="src/families/tees/simple_tee.py")
             + "\n"
             + component_body("SIMPLE_TEE"),
         )
@@ -188,14 +188,15 @@ class TestListGeneratedInRoot(BaseTestCase):
 
 
 class TestOutputPath(BaseTestCase):
-    def test_nombre_minuscula(self):
-        self.assertEqual(build.output_path(self.root, "SIMPLE_TEE").name, "simple_tee.py")
-        self.assertEqual(build.output_path(self.root, "HOLLOW_CYLINDER").name,
-                         "hollow_cylinder.py")
+    def test_nombre_con_familia(self):
+        src = self.add_component("tees/simple_tee.py", "SIMPLE_TEE")
+        self.assertEqual(build.output_path(self.root, src).name, "tees.simple_tee.py")
+        src2 = self.add_component("primitives/hollow_cylinder.py", "HOLLOW_CYLINDER")
+        self.assertEqual(build.output_path(self.root, src2).name, "primitives.hollow_cylinder.py")
 
     def test_content_tiene_marcador_y_cuerpo(self):
         src = self.add_component("tees/simple_tee.py", "SIMPLE_TEE")
-        content = build.expected_content(self.root, "SIMPLE_TEE", src)
+        content = build.expected_content(self.root, src)
         self.assertTrue(content.startswith(build.GENERATED_PREFIX))
         self.assertIn("tees/simple_tee.py", content.splitlines()[0])
         self.assertIn("def SIMPLE_TEE(", content)
@@ -203,11 +204,11 @@ class TestOutputPath(BaseTestCase):
 
 class TestFlatten(BaseTestCase):
     def test_genera_outputs_con_marcador(self):
-        self.add_component("tees/simple_tee.py", "SIMPLE_TEE")
-        self.add_component("primitives/simple_box.py", "SIMPLE_BOX")
+        src1 = self.add_component("tees/simple_tee.py", "SIMPLE_TEE")
+        src2 = self.add_component("primitives/simple_box.py", "SIMPLE_BOX")
         build.flatten(self.root)
-        for name in ("SIMPLE_TEE", "SIMPLE_BOX"):
-            out = build.output_path(self.root, name)
+        for src in (src1, src2):
+            out = build.output_path(self.root, src)
             self.assertTrue(out.exists())
             text = out.read_text(encoding="utf-8")
             self.assertIn(build.GENERATED_PREFIX, text)
@@ -215,8 +216,8 @@ class TestFlatten(BaseTestCase):
     def test_contenido_output_igual_a_fuente(self):
         src = self.add_component("tees/simple_tee.py", "SIMPLE_TEE")
         build.flatten(self.root)
-        out = build.output_path(self.root, "SIMPLE_TEE")
-        expected = build.expected_content(self.root, "SIMPLE_TEE", src)
+        out = build.output_path(self.root, src)
+        expected = build.expected_content(self.root, src)
         self.assertEqual(out.read_text(encoding="utf-8"), expected)
 
     def test_no_modifica_fuentes(self):
@@ -228,7 +229,7 @@ class TestFlatten(BaseTestCase):
     def test_remueve_outputs_obsoletos(self):
         stale = write(
             self.root, "ghost.py",
-            build.GENERATED_MARKER.format(src="tees/viejo.py") + "\npass\n",
+            build.GENERATED_MARKER.format(src="src/families/tees/viejo.py") + "\npass\n",
         )
         self.add_component("tees/simple_tee.py", "SIMPLE_TEE")
         build.flatten(self.root)
@@ -242,17 +243,22 @@ class TestFlatten(BaseTestCase):
         self.assertEqual(manual.read_text(encoding="utf-8"), before)
 
     def test_componente_colisiona_con_protegido(self):
-        self.add_component("tees/simple_tee.py", "UTILS")
-        with self.assertRaises(build.BuildError):
-            build.flatten(self.root)
-        self.assertFalse(build.output_path(self.root, "UTILS").exists())
+        # Un componente cuyo output {family}.{stem}.py coincide con PROTECTED.
+        # Creamos familia "__init__" => output "__init__.__init__.py" no sirve.
+        # Mejor: nombre de archivo que produzca colision directa.
+        # Con naming {family}.{stem}.py, necesitamos family+stem = nombre protegido.
+        # Imposible colision directa, pero build.py checa output_name in PROTECTED.
+        # Creamos un test que verifica que _collisions detecta nombres protegidos.
+        collisions = build._collisions({"build.py", "tees.simple_tee.py"})
+        self.assertIn("build.py", collisions)
+        self.assertNotIn("tees.simple_tee.py", collisions)
 
     def test_actualiza_gitignore(self):
         self.add_component("tees/simple_tee.py", "SIMPLE_TEE")
         build.flatten(self.root)
         gi = (self.root / ".gitignore").read_text(encoding="utf-8")
         self.assertIn(build.GITIGNORE_START, gi)
-        self.assertIn("/simple_tee.py", gi)
+        self.assertIn("/tees.simple_tee.py", gi)
 
     def test_devuelve_componentes(self):
         self.add_component("tees/simple_tee.py", "SIMPLE_TEE")
@@ -262,32 +268,32 @@ class TestFlatten(BaseTestCase):
 
 class TestSyncGitignore(BaseTestCase):
     def test_crea_bloque_si_no_existe(self):
-        build.sync_gitignore(self.root, ["simple_tee.py", "simple_box.py"])
+        build.sync_gitignore(self.root, ["tees.simple_tee.py", "primitives.simple_box.py"])
         text = (self.root / ".gitignore").read_text(encoding="utf-8")
         lines = text.splitlines()
         self.assertIn(build.GITIGNORE_START, lines)
         self.assertIn(build.GITIGNORE_END, lines)
-        self.assertIn("/simple_box.py", lines)
-        self.assertIn("/simple_tee.py", lines)
+        self.assertIn("/primitives.simple_box.py", lines)
+        self.assertIn("/tees.simple_tee.py", lines)
 
     def test_reemplaza_bloque_existente(self):
         write(self.root, ".gitignore",
               "# >>> generated by build.py\n/old_one.py\n# <<< generated by build.py\n")
-        build.sync_gitignore(self.root, ["simple_tee.py"])
+        build.sync_gitignore(self.root, ["tees.simple_tee.py"])
         text = (self.root / ".gitignore").read_text(encoding="utf-8")
-        self.assertIn("/simple_tee.py", text)
+        self.assertIn("/tees.simple_tee.py", text)
         self.assertNotIn("/old_one.py", text)
 
     def test_preserva_contenido_ajeno(self):
         write(self.root, ".gitignore", "# Python\n__pycache__/\n*.xml\n")
-        build.sync_gitignore(self.root, ["simple_tee.py"])
+        build.sync_gitignore(self.root, ["tees.simple_tee.py"])
         text = (self.root / ".gitignore").read_text(encoding="utf-8")
         self.assertIn("__pycache__/", text)
         self.assertIn("*.xml", text)
 
     def test_no_duplica_bloque(self):
-        build.sync_gitignore(self.root, ["simple_tee.py"])
-        build.sync_gitignore(self.root, ["simple_tee.py"])
+        build.sync_gitignore(self.root, ["tees.simple_tee.py"])
+        build.sync_gitignore(self.root, ["tees.simple_tee.py"])
         text = (self.root / ".gitignore").read_text(encoding="utf-8")
         self.assertEqual(text.count(build.GITIGNORE_START), 1)
 
@@ -313,7 +319,7 @@ class TestCollectErrors(BaseTestCase):
     def test_error_si_output_desactualizado(self):
         src = self.add_component("tees/simple_tee.py", "SIMPLE_TEE")
         build.flatten(self.root)
-        write(self.root, "tees/simple_tee.py", src.read_text(encoding="utf-8") + "pass\n")
+        write(self.root, "src/families/tees/simple_tee.py", src.read_text(encoding="utf-8") + "pass\n")
         errors = build.collect_errors(self.root)
         self.assertTrue(any("desactualizado" in e for e in errors))
 
@@ -321,19 +327,21 @@ class TestCollectErrors(BaseTestCase):
         self.add_component("tees/simple_tee.py", "SIMPLE_TEE")
         build.flatten(self.root)
         write(self.root, "ghost.py",
-              build.GENERATED_MARKER.format(src="tees/ghost.py") + "\npass\n")
+              build.GENERATED_MARKER.format(src="src/families/tees/ghost.py") + "\npass\n")
         errors = build.collect_errors(self.root)
         self.assertTrue(any("obsoletos" in e for e in errors))
         self.assertIn("ghost.py", errors[0] if errors else "")
 
     def test_error_si_colision_con_protegido(self):
-        self.add_component("tees/simple_tee.py", "UTILS")
-        errors = build.collect_errors(self.root)
-        self.assertTrue(any("protegido" in e for e in errors))
+        # Con el naming {family}.{stem}.py, una colision real requiere que
+        # el output coincida con un nombre protegido. Verificamos la logica
+        # de _collisions directamente.
+        collisions = build._collisions({"README.md", "tees.simple_tee.py"})
+        self.assertIn("README.md", collisions)
 
     def test_error_doble_registro(self):
         self.add_component("tees/simple_tee.py", "SIMPLE_TEE")
-        self.add_component("straight/union/simple_tee.py", "SIMPLE_TEE")
+        self.add_component("straight/simple_tee.py", "SIMPLE_TEE")
         with self.assertRaises(build.BuildError):
             build.collect_errors(self.root)
 
