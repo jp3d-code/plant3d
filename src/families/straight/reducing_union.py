@@ -24,16 +24,12 @@ def REDUCING_UNION(s, A=1.52, D=0.60, DX=0.50, E=0.09, **kw):
     R2 = DX / 2
     Rbore = E / 2
 
-    upper = CYLINDER(s, R=R1, H=A)
-
-    lower = CYLINDER(s, R=R2, H=A)
-    lower.translate((0, 0, -A))
-    upper.uniteWith(lower)
-    lower.erase()
+    body = CONE(s, R1=R1, R2=R2, H=A * 2, E=0.0)
+    body.translate((0, 0, -A))
 
     bore = CYLINDER(s, R=Rbore, H=A * 2)
     bore.translate((0, 0, -A))
-    upper.subtractFrom(bore)
+    body.subtractFrom(bore)
     bore.erase()
 
     s.setPoint((0, 0, A), (0, 0, 1), 0)

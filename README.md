@@ -98,6 +98,7 @@ python build.py
 En la línea de comandos de AutoCAD Plant 3D, ejecuta:
 
 ```text
+(command "arx" "l" "PnP3dACPAdapter")
 PLANTREGISTERCUSTOMSCRIPTS
 ```
 

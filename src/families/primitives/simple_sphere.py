@@ -3,6 +3,7 @@ Esfera simple para Plant3D.
 Dibuja una esfera solida con radio configurable.
 """
 from varmain.primitiv import *
+from varmain.var_basic import *
 from varmain.custom import *
 from math import *
 

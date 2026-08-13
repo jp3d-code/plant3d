@@ -25,16 +25,12 @@ def LONG_REDUCER(s, A=2.57, D=0.66, DX=0.50, E=0.25, **kw):
     Rbore = E / 2
     halfA = A / 2
 
-    upper = CYLINDER(s, R=R1, H=halfA)
-
-    lower = CYLINDER(s, R=R2, H=halfA)
-    lower.translate((0, 0, -halfA))
-    upper.uniteWith(lower)
-    lower.erase()
+    body = CONE(s, R1=R1, R2=R2, H=A, E=0.0)
+    body.translate((0, 0, -halfA))
 
     bore = CYLINDER(s, R=Rbore, H=A)
     bore.translate((0, 0, -halfA))
-    upper.subtractFrom(bore)
+    body.subtractFrom(bore)
     bore.erase()
 
     s.setPoint((0, 0, halfA), (0, 0, 1), 0)
