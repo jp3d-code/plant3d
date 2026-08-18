@@ -1,0 +1,6 @@
+nd,part_num,OD,L,H,T,OD1,ports_count,end_type,skey,pnp_class,category,family_desc,short_desc
+0.1250,SS-200-1-2,0.1250,1.20,,0.028,,2,SWAGELOK,CN,Coupling,Fittings,Swagelok Male Connector NPT,Swagelok Male Conn.
+0.2500,SS-400-1-4,0.2500,1.49,,0.048,,2,SWAGELOK,CN,Coupling,Fittings,Swagelok Male Connector NPT,Swagelok Male Conn.
+0.3750,SS-600-1-6,0.3750,1.57,,0.065,,2,SWAGELOK,CN,Coupling,Fittings,Swagelok Male Connector NPT,Swagelok Male Conn.
+0.5000,SS-810-1-8,0.5000,1.86,,0.065,,2,SWAGELOK,CN,Coupling,Fittings,Swagelok Male Connector NPT,Swagelok Male Conn.
+1.0000,SS-1610-1-16,1.0000,2.26,,0.095,,2,SWAGELOK,CN,Coupling,Fittings,Swagelok Male Connector NPT,Swagelok Male Conn.

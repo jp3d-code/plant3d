@@ -1,0 +1,6 @@
+nd,part_num,OD,L,H,T,OD1,ports_count,end_type,skey,pnp_class,category,family_desc,short_desc
+0.1250,SS-200-61,0.1250,2.02,,0.028,,2,SWAGELOK,UN,Coupling,Fittings,Swagelok Bulkhead Union,Swagelok Bulkhead Union
+0.2500,SS-400-61,0.2500,2.27,,0.048,,2,SWAGELOK,UN,Coupling,Fittings,Swagelok Bulkhead Union,Swagelok Bulkhead Union
+0.3750,SS-600-61,0.3750,2.45,,0.065,,2,SWAGELOK,UN,Coupling,Fittings,Swagelok Bulkhead Union,Swagelok Bulkhead Union
+0.5000,SS-810-61,0.5000,2.80,,0.065,,2,SWAGELOK,UN,Coupling,Fittings,Swagelok Bulkhead Union,Swagelok Bulkhead Union
+1.0000,SS-1610-61,1.0000,3.69,,0.095,,2,SWAGELOK,UN,Coupling,Fittings,Swagelok Bulkhead Union,Swagelok Bulkhead Union

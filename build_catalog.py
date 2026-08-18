@@ -1,23 +1,15 @@
 """
-build_catalog.py - Generador automatizado de catálogo .pcat (SQLite3) completo para Swagelok en Plant 3D 2027.
+build_catalog.py - Generador automatizado y DESACOPLADO de catálogo .pcat (SQLite3) para Plant 3D 2027.
 
-Incluye todas las familias de componentes:
-- Uniones Rectas, Reductoras y Pasamuros (Coupling)
-- Codos de 90° y 45° (Elbow)
-- Tees y Cruces (Tee, Cross)
-- Conectores Macho y Hembra (Coupling / Nipple)
-- Tapones y Racores (Cap, Plug)
-- Válvulas de Bola y Aguja (ValveBody)
-
-Utiliza la estructura de puertos exacta de Autodesk Plant 3D:
-- S1 definido en EngineeringItems.
-- S2..SN definidos individualmente en Port, PartPort y PnPRowRelations.
+Escanea dinámicamente todos los archivos .csv en src/families/ para construir el catálogo
+sin tener datos de dimensiones hardcodeados en el código Python.
 
 Uso:
     python build_catalog.py
 """
 import os
 import sys
+import csv
 import uuid
 import sqlite3
 import shutil
@@ -25,6 +17,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+FAMILIES_DIR = ROOT / "src" / "families"
 TEMPLATE_PCAT = Path(r"C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomParts Imperial Catalog.pcat")
 OUTPUT_PCAT = ROOT / "Swagelok_Catalog.pcat"
 
@@ -117,14 +110,12 @@ def clean_all_data_tables(conn):
 def add_catalog_family(conn, template_dict, family_desc, short_desc, script_name, sizes_list, end_type="SWAGELOK", skey="UN", pnp_class="Coupling", category="Fittings"):
     """
     Clona la fila de una plantilla oficial y aplica la estructura exacta de puertos de Plant 3D.
-    - S1 se define en las columnas de EngineeringItems.
-    - S2..SN se definen individualmente en las tablas Port, PartPort y PnPRowRelations.
     """
     cursor = conn.cursor()
-    family_guid = guid_to_bytes()  # GUID ÚNICO COMPARTIDO POR TODAS LAS TALLAS DE LA FAMILIA
+    family_guid = guid_to_bytes()
     win_filetime = get_current_win_filetime()
 
-    print(f"\n[+] Añadiendo Familia: {family_desc} ({len(sizes_list)} tallas)")
+    print(f"\n[+] Añadiendo Familia: {family_desc} ({len(sizes_list)} tallas desde CSV)")
 
     for item in sizes_list:
         nd = item["nd"]
@@ -133,7 +124,7 @@ def add_catalog_family(conn, template_dict, family_desc, short_desc, script_name
         size_record_guid = guid_to_bytes()
         ports_count = item.get("ports_count", 2)
 
-        # A. Crear PnPBase para la Parte (Coupling, Elbow, Tee, Cross, Cap, Plug, ValveBody, etc.)
+        # A. Crear PnPBase para la Parte
         part_pnp_id = get_next_pnp_id(cursor)
         part_guid = guid_to_bytes()
         cursor.execute("""
@@ -146,7 +137,7 @@ def add_catalog_family(conn, template_dict, family_desc, short_desc, script_name
         param_def = ",".join([f"{k}={v:.6f}" if isinstance(v, float) else f"{k}={v}" for k, v in params.items()])
         iso_def = f"TYPE={pnp_class.upper()},SKEY={skey}"
 
-        # C. Rellenar diccionario de EngineeringItems (Incluye la definición del Puerto 1: S1)
+        # C. Rellenar diccionario de EngineeringItems (Incluye Puerto 1: S1)
         row_data = dict(template_dict)
         row_data["PnPID"] = part_pnp_id
         row_data["PartFamilyId"] = family_guid
@@ -168,7 +159,6 @@ def add_catalog_family(conn, template_dict, family_desc, short_desc, script_name
         row_data["SizeRecordId"] = size_record_guid
         row_data["ConnectionPortCount"] = ports_count
         
-        # Atributos explícitos de Puerto 1 (S1) en EngineeringItems
         row_data["PortName"] = "S1"
         row_data["LengthUnit"] = "in"
         row_data["PartCategory"] = category
@@ -189,20 +179,18 @@ def add_catalog_family(conn, template_dict, family_desc, short_desc, script_name
         except Exception:
             pass
 
-        # D. Registrar Puertos adicionales (S2, S3... SN) en Port, PartPort y PnPRowRelations
+        # D. Registrar Puertos adicionales (S2, S3... SN)
         for p_idx in range(2, ports_count + 1):
             port_pnp_id = get_next_pnp_id(cursor)
             port_guid = guid_to_bytes()
             port_size_record_guid = guid_to_bytes()
             port_name = f"S{p_idx}"
 
-            # 1. PnPBase para el Puerto
             cursor.execute("""
                 INSERT INTO PnPBase (PnPID, PnPClassName, PnPStatus, PnPRevision, PnPGuid, PnPTimestamp)
                 VALUES (?, 'Port', 0, 0, ?, ?);
             """, (port_pnp_id, port_guid, win_filetime))
 
-            # 2. Fila en Port
             cursor.execute("""
                 INSERT INTO Port (
                     PnPID, SizeRecordId, PortName, NominalDiameter, NominalUnit,
@@ -210,7 +198,6 @@ def add_catalog_family(conn, template_dict, family_desc, short_desc, script_name
                 ) VALUES (?, ?, ?, ?, 'in', ?, ?, 'in');
             """, (port_pnp_id, port_size_record_guid, port_name, nd, item.get("OD", nd), end_type))
 
-            # 3. PnPBase para PartPort
             partport_pnp_id = get_next_pnp_id(cursor)
             partport_guid = guid_to_bytes()
             cursor.execute("""
@@ -218,13 +205,11 @@ def add_catalog_family(conn, template_dict, family_desc, short_desc, script_name
                 VALUES (?, 'PartPort', 0, 0, ?, ?);
             """, (partport_pnp_id, partport_guid, win_filetime))
 
-            # 4. Fila en PartPort vinculando la Parte con el Puerto adicional
             cursor.execute("""
                 INSERT INTO PartPort (PnPID, PnPGuid, PnPTimestamp, Part, Port, Name)
                 VALUES (?, ?, ?, ?, ?, ?);
             """, (partport_pnp_id, partport_guid, win_filetime, part_pnp_id, port_pnp_id, port_name))
 
-            # 5. Relación en PnPRowRelations
             cursor.execute("""
                 INSERT INTO PnPRowRelations (ROWID, RELID, RelationshipTypeName)
                 VALUES (?, ?, 'PartPort');
@@ -250,8 +235,85 @@ def remove_redundant_catalogs():
                 print(f"No se pudo eliminar {f.name}: {e}")
 
 
+def load_families_from_csv(conn, templates_dict):
+    """
+    Escanea dinámicamente la carpeta src/families/ en busca de archivos .csv
+    y procesa cada familia de componentes de forma 100% desacoplada.
+    """
+    if not FAMILIES_DIR.exists():
+        print(f"ERROR: No existe la carpeta {FAMILIES_DIR}")
+        return
+
+    csv_files = sorted(FAMILIES_DIR.rglob("*.csv"))
+    print(f"\n[+] Se encontraron {len(csv_files)} archivos CSV de familias en {FAMILIES_DIR.name}/:\n")
+
+    for csv_path in csv_files:
+        rel_path = csv_path.relative_to(FAMILIES_DIR)
+        family_folder = rel_path.parts[0]
+        component_stem = csv_path.stem
+        script_name = f"{family_folder}.{component_stem}"
+
+        sizes_list = []
+        family_meta = {}
+
+        with open(csv_path, mode="r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                nd = float(row["nd"])
+                part_num = row["part_num"]
+                od = float(row["OD"])
+                ports_count = int(row.get("ports_count", 2))
+                end_type = row.get("end_type", "SWAGELOK")
+                skey = row.get("skey", "UN")
+                pnp_class = row.get("pnp_class", "Coupling")
+                category = row.get("category", "Fittings")
+                family_desc = row["family_desc"]
+                short_desc = row["short_desc"]
+
+                # Extraer parámetros geométricos no vacíos (OD, L, H, T, OD1, etc.)
+                params = {}
+                for k in ["OD", "L", "H", "T", "OD1"]:
+                    val = row.get(k, "").strip() if row.get(k) else ""
+                    if val:
+                        params[k] = float(val)
+
+                sizes_list.append({
+                    "nd": nd,
+                    "part_num": part_num,
+                    "OD": od,
+                    "ports_count": ports_count,
+                    "params": params
+                })
+
+                family_meta = {
+                    "family_desc": family_desc,
+                    "short_desc": short_desc,
+                    "end_type": end_type,
+                    "skey": skey,
+                    "pnp_class": pnp_class,
+                    "category": category,
+                    "script_name": script_name
+                }
+
+        pnp_class_name = family_meta["pnp_class"]
+        template_dict = templates_dict.get(pnp_class_name, templates_dict["Coupling"])
+
+        add_catalog_family(
+            conn,
+            template_dict=template_dict,
+            family_desc=family_meta["family_desc"],
+            short_desc=family_meta["short_desc"],
+            script_name=family_meta["script_name"],
+            skey=family_meta["skey"],
+            end_type=family_meta["end_type"],
+            pnp_class=family_meta["pnp_class"],
+            category=family_meta["category"],
+            sizes_list=sizes_list
+        )
+
+
 def build_swagelok_catalog():
-    print("=== CONSTRUYENDO CATÁLOGO COMPLETO SWAGELOK .PCAT ===\n")
+    print("=== CONSTRUYENDO CATÁLOGO DESACOPLADO DESDE ARCHIVOS CSV SWAGELOK .PCAT ===\n")
     prepare_base_catalog()
 
     conn = sqlite3.connect(OUTPUT_PCAT)
@@ -264,192 +326,29 @@ def build_swagelok_catalog():
         cols = [c[0] for c in cursor.description]
         return dict(zip(cols, row))
 
-    tpl_coupling = load_template(2252) # Coupling
-    tpl_elbow = load_template(88)      # Elbow
-    tpl_tee = load_template(1682)      # Tee
-    tpl_cross = load_template(573)     # Cross
-    tpl_reducer = load_template(3771)  # Reducer
-    tpl_cap = load_template(807)       # Cap
-    tpl_plug = load_template(1413)     # Plug
-    tpl_valve = load_template(1916)    # ValveBody
+    templates_dict = {
+        "Coupling": load_template(2252),
+        "Elbow": load_template(88),
+        "Tee": load_template(1682),
+        "Cross": load_template(573),
+        "Reducer": load_template(3771),
+        "Cap": load_template(807),
+        "Plug": load_template(1413),
+        "ValveBody": load_template(1916)
+    }
 
     # Limpieza exhaustiva de TODAS las tablas de datos para eliminar huérfanos
     clean_all_data_tables(conn)
 
-    # 1. Uniones Rectas (straight.union)
-    add_catalog_family(
-        conn, template_dict=tpl_coupling,
-        family_desc="Swagelok Straight Union", short_desc="Swagelok Union",
-        script_name="straight.union", skey="UN", pnp_class="Coupling", category="Fittings",
-        sizes_list=[
-            {"nd": 0.0625, "part_num": "SS-100-6", "OD": 0.0625, "params": {"OD": 0.0625, "L": 0.99, "T": 0.010}},
-            {"nd": 0.125,  "part_num": "SS-200-6", "OD": 0.125,  "params": {"OD": 0.125,  "L": 1.40, "T": 0.028}},
-            {"nd": 0.1875, "part_num": "SS-300-6", "OD": 0.1875, "params": {"OD": 0.1875, "L": 1.47, "T": 0.030}},
-            {"nd": 0.250,  "part_num": "SS-400-6", "OD": 0.250,  "params": {"OD": 0.250,  "L": 1.61, "T": 0.048}},
-            {"nd": 0.3125, "part_num": "SS-500-6", "OD": 0.3125, "params": {"OD": 0.3125, "L": 1.69, "T": 0.055}},
-            {"nd": 0.375,  "part_num": "SS-600-6", "OD": 0.375,  "params": {"OD": 0.375,  "L": 1.77, "T": 0.065}},
-            {"nd": 0.500,  "part_num": "SS-810-6", "OD": 0.500,  "params": {"OD": 0.500,  "L": 2.02, "T": 0.065}},
-            {"nd": 0.625,  "part_num": "SS-1010-6","OD": 0.625,  "params": {"OD": 0.625,  "L": 2.05, "T": 0.065}},
-            {"nd": 0.750,  "part_num": "SS-1210-6","OD": 0.750,  "params": {"OD": 0.750,  "L": 2.11, "T": 0.075}},
-            {"nd": 0.875,  "part_num": "SS-1410-6","OD": 0.875,  "params": {"OD": 0.875,  "L": 2.17, "T": 0.083}},
-            {"nd": 1.000,  "part_num": "SS-1610-6","OD": 1.000,  "params": {"OD": 1.000,  "L": 2.55, "T": 0.095}},
-        ]
-    )
-
-    # 2. Uniones Reductoras (straight.reducing_union)
-    add_catalog_family(
-        conn, template_dict=tpl_coupling,
-        family_desc="Swagelok Reducing Union", short_desc="Swagelok Red. Union",
-        script_name="straight.reducing_union", skey="UN", pnp_class="Coupling", category="Fittings",
-        sizes_list=[
-            {"nd": 0.250, "part_num": "SS-400-6-2", "OD": 0.250, "params": {"OD": 0.250, "OD1": 0.125, "L": 1.52, "T": 0.048}},
-            {"nd": 0.375, "part_num": "SS-600-6-4", "OD": 0.375, "params": {"OD": 0.375, "OD1": 0.250, "L": 1.70, "T": 0.065}},
-            {"nd": 0.500, "part_num": "SS-810-6-4", "OD": 0.500, "params": {"OD": 0.500, "OD1": 0.250, "L": 1.85, "T": 0.065}},
-            {"nd": 0.500, "part_num": "SS-810-6-6", "OD": 0.500, "params": {"OD": 0.500, "OD1": 0.375, "L": 1.91, "T": 0.065}},
-            {"nd": 0.750, "part_num": "SS-1210-6-8","OD": 0.750, "params": {"OD": 0.750, "OD1": 0.500, "L": 2.07, "T": 0.075}},
-            {"nd": 1.000, "part_num": "SS-1610-6-12","OD": 1.000,"params": {"OD": 1.000, "OD1": 0.750, "L": 2.38, "T": 0.095}},
-        ]
-    )
-
-    # 3. Uniones Pasamuros (straight.bulkhead_union)
-    add_catalog_family(
-        conn, template_dict=tpl_coupling,
-        family_desc="Swagelok Bulkhead Union", short_desc="Swagelok Bulkhead Union",
-        script_name="straight.bulkhead_union", skey="UN", pnp_class="Coupling", category="Fittings",
-        sizes_list=[
-            {"nd": 0.125, "part_num": "SS-200-61", "OD": 0.125, "params": {"OD": 0.125, "L": 2.02, "T": 0.028}},
-            {"nd": 0.250, "part_num": "SS-400-61", "OD": 0.250, "params": {"OD": 0.250, "L": 2.27, "T": 0.048}},
-            {"nd": 0.375, "part_num": "SS-600-61", "OD": 0.375, "params": {"OD": 0.375, "L": 2.45, "T": 0.065}},
-            {"nd": 0.500, "part_num": "SS-810-61", "OD": 0.500, "params": {"OD": 0.500, "L": 2.80, "T": 0.065}},
-            {"nd": 1.000, "part_num": "SS-1610-61","OD": 1.000, "params": {"OD": 1.000, "L": 3.69, "T": 0.095}},
-        ]
-    )
-
-    # 4. Codos de 90° Unión (elbows.elbow_90)
-    add_catalog_family(
-        conn, template_dict=tpl_elbow,
-        family_desc="Swagelok 90° Union Elbow", short_desc="Swagelok 90° Elbow",
-        script_name="elbows.elbow_90", skey="EL", pnp_class="Elbow", category="Fittings",
-        sizes_list=[
-            {"nd": 0.0625, "part_num": "SS-100-9", "OD": 0.0625, "params": {"OD": 0.0625, "L": 0.70, "T": 0.010}},
-            {"nd": 0.125,  "part_num": "SS-200-9", "OD": 0.125,  "params": {"OD": 0.125,  "L": 0.88, "T": 0.028}},
-            {"nd": 0.1875, "part_num": "SS-300-9", "OD": 0.1875, "params": {"OD": 0.1875, "L": 1.00, "T": 0.030}},
-            {"nd": 0.250,  "part_num": "SS-400-9", "OD": 0.250,  "params": {"OD": 0.250,  "L": 1.06, "T": 0.048}},
-            {"nd": 0.3125, "part_num": "SS-500-9", "OD": 0.3125, "params": {"OD": 0.3125, "L": 1.13, "T": 0.055}},
-            {"nd": 0.375,  "part_num": "SS-600-9", "OD": 0.375,  "params": {"OD": 0.375,  "L": 1.20, "T": 0.065}},
-            {"nd": 0.500,  "part_num": "SS-810-9", "OD": 0.500,  "params": {"OD": 0.500,  "L": 1.42, "T": 0.065}},
-            {"nd": 0.750,  "part_num": "SS-1210-9","OD": 0.750,  "params": {"OD": 0.750,  "L": 1.57, "T": 0.075}},
-            {"nd": 1.000,  "part_num": "SS-1610-9","OD": 1.000,  "params": {"OD": 1.000,  "L": 1.93, "T": 0.095}},
-        ]
-    )
-
-    # 5. Codos de 45° Unión (elbows.elbow_45)
-    add_catalog_family(
-        conn, template_dict=tpl_elbow,
-        family_desc="Swagelok 45° Union Elbow", short_desc="Swagelok 45° Elbow",
-        script_name="elbows.elbow_45", skey="EL", pnp_class="Elbow", category="Fittings",
-        sizes_list=[
-            {"nd": 0.125, "part_num": "SS-200-9-45", "OD": 0.125, "params": {"OD": 0.125, "L": 0.73, "T": 0.028}},
-            {"nd": 0.250, "part_num": "SS-400-9-45", "OD": 0.250, "params": {"OD": 0.250, "L": 0.83, "T": 0.048}},
-            {"nd": 0.375, "part_num": "SS-600-9-45", "OD": 0.375, "params": {"OD": 0.375, "L": 0.87, "T": 0.065}},
-            {"nd": 0.500, "part_num": "SS-810-9-45", "OD": 0.500, "params": {"OD": 0.500, "L": 0.98, "T": 0.065}},
-            {"nd": 1.000, "part_num": "SS-1610-9-45","OD": 1.000, "params": {"OD": 1.000, "L": 1.31, "T": 0.095}},
-        ]
-    )
-
-    # 6. Codos de 90° Macho NPT (elbows.male_elbow_90)
-    add_catalog_family(
-        conn, template_dict=tpl_elbow,
-        family_desc="Swagelok 90° Male NPT Elbow", short_desc="Swagelok Male Elbow",
-        script_name="elbows.male_elbow_90", skey="EL", pnp_class="Elbow", category="Fittings",
-        sizes_list=[
-            {"nd": 0.125, "part_num": "SS-200-2-2", "OD": 0.125, "params": {"OD": 0.125, "L": 0.88, "H": 0.72, "T": 0.028}},
-            {"nd": 0.250, "part_num": "SS-400-2-4", "OD": 0.250, "params": {"OD": 0.250, "L": 1.06, "H": 1.00, "T": 0.048}},
-            {"nd": 0.375, "part_num": "SS-600-2-6", "OD": 0.375, "params": {"OD": 0.375, "L": 1.20, "H": 1.14, "T": 0.065}},
-            {"nd": 0.500, "part_num": "SS-810-2-8", "OD": 0.500, "params": {"OD": 0.500, "L": 1.42, "H": 1.50, "T": 0.065}},
-            {"nd": 1.000, "part_num": "SS-1610-2-16","OD": 1.000,"params": {"OD": 1.000, "L": 1.93, "H": 1.90, "T": 0.095}},
-        ]
-    )
-
-    # 7. Tees Unión Igual (tees.union_tee)
-    add_catalog_family(
-        conn, template_dict=tpl_tee,
-        family_desc="Swagelok Union Tee", short_desc="Swagelok Union Tee",
-        script_name="tees.union_tee", skey="TE", pnp_class="Tee", category="Fittings",
-        sizes_list=[
-            {"nd": 0.0625, "part_num": "SS-100-3", "OD": 0.0625, "ports_count": 3, "params": {"OD": 0.0625, "L": 1.40, "H": 0.70, "T": 0.010}},
-            {"nd": 0.125,  "part_num": "SS-200-3", "OD": 0.125,  "ports_count": 3, "params": {"OD": 0.125,  "L": 1.76, "H": 0.88, "T": 0.028}},
-            {"nd": 0.1875, "part_num": "SS-300-3", "OD": 0.1875, "ports_count": 3, "params": {"OD": 0.1875, "L": 1.92, "H": 0.96, "T": 0.030}},
-            {"nd": 0.250,  "part_num": "SS-400-3", "OD": 0.250,  "ports_count": 3, "params": {"OD": 0.250,  "L": 2.12, "H": 1.06, "T": 0.048}},
-            {"nd": 0.3125, "part_num": "SS-500-3", "OD": 0.3125, "ports_count": 3, "params": {"OD": 0.3125, "L": 2.34, "H": 1.17, "T": 0.055}},
-            {"nd": 0.375,  "part_num": "SS-600-3", "OD": 0.375,  "ports_count": 3, "params": {"OD": 0.375,  "L": 2.40, "H": 1.20, "T": 0.065}},
-            {"nd": 0.500,  "part_num": "SS-810-3", "OD": 0.500,  "ports_count": 3, "params": {"OD": 0.500,  "L": 2.84, "H": 1.42, "T": 0.065}},
-            {"nd": 0.750,  "part_num": "SS-1210-3","OD": 0.750,  "ports_count": 3, "params": {"OD": 0.750,  "L": 3.14, "H": 1.57, "T": 0.075}},
-            {"nd": 1.000,  "part_num": "SS-1610-3","OD": 1.000,  "ports_count": 3, "params": {"OD": 1.000,  "L": 3.86, "H": 1.93, "T": 0.095}},
-        ]
-    )
-
-    # 8. Cruces Unión Igual (crosses.union_cross)
-    add_catalog_family(
-        conn, template_dict=tpl_cross,
-        family_desc="Swagelok Union Cross", short_desc="Swagelok Union Cross",
-        script_name="crosses.union_cross", skey="CR", pnp_class="Cross", category="Fittings",
-        sizes_list=[
-            {"nd": 0.125, "part_num": "SS-200-4", "OD": 0.125, "ports_count": 4, "params": {"OD": 0.125, "L": 1.76, "H": 0.88, "T": 0.028}},
-            {"nd": 0.250, "part_num": "SS-400-4", "OD": 0.250, "ports_count": 4, "params": {"OD": 0.250, "L": 2.12, "H": 1.06, "T": 0.048}},
-            {"nd": 0.375, "part_num": "SS-600-4", "OD": 0.375, "ports_count": 4, "params": {"OD": 0.375, "L": 2.40, "H": 1.20, "T": 0.065}},
-            {"nd": 0.500, "part_num": "SS-810-4", "OD": 0.500, "ports_count": 4, "params": {"OD": 0.500, "L": 2.84, "H": 1.42, "T": 0.065}},
-            {"nd": 1.000, "part_num": "SS-1610-4","OD": 1.000, "ports_count": 4, "params": {"OD": 1.000, "L": 3.86, "H": 1.93, "T": 0.095}},
-        ]
-    )
-
-    # 9. Conectores Macho NPT (male.male_connector)
-    add_catalog_family(
-        conn, template_dict=tpl_coupling,
-        family_desc="Swagelok Male Connector NPT", short_desc="Swagelok Male Conn.",
-        script_name="male.male_connector", skey="CN", pnp_class="Coupling", category="Fittings",
-        sizes_list=[
-            {"nd": 0.125, "part_num": "SS-200-1-2", "OD": 0.125, "params": {"OD": 0.125, "L": 1.20, "T": 0.028}},
-            {"nd": 0.250, "part_num": "SS-400-1-4", "OD": 0.250, "params": {"OD": 0.250, "L": 1.49, "T": 0.048}},
-            {"nd": 0.375, "part_num": "SS-600-1-6", "OD": 0.375, "params": {"OD": 0.375, "L": 1.57, "T": 0.065}},
-            {"nd": 0.500, "part_num": "SS-810-1-8", "OD": 0.500, "params": {"OD": 0.500, "L": 1.86, "T": 0.065}},
-            {"nd": 1.000, "part_num": "SS-1610-1-16","OD": 1.000,"params": {"OD": 1.000, "L": 2.26, "T": 0.095}},
-        ]
-    )
-
-    # 10. Tapones de Tubo (plugs.tube_cap)
-    add_catalog_family(
-        conn, template_dict=tpl_cap,
-        family_desc="Swagelok Tube Cap", short_desc="Swagelok Cap",
-        script_name="plugs.tube_cap", skey="CP", pnp_class="Cap", category="Fittings",
-        sizes_list=[
-            {"nd": 0.125, "part_num": "SS-200-C", "OD": 0.125, "ports_count": 1, "params": {"OD": 0.125, "L": 0.60, "T": 0.028}},
-            {"nd": 0.250, "part_num": "SS-400-C", "OD": 0.250, "ports_count": 1, "params": {"OD": 0.250, "L": 0.68, "T": 0.048}},
-            {"nd": 0.375, "part_num": "SS-600-C", "OD": 0.375, "ports_count": 1, "params": {"OD": 0.375, "L": 0.72, "T": 0.065}},
-            {"nd": 0.500, "part_num": "SS-810-C", "OD": 0.500, "ports_count": 1, "params": {"OD": 0.500, "L": 0.88, "T": 0.065}},
-            {"nd": 1.000, "part_num": "SS-1610-C","OD": 1.000, "ports_count": 1, "params": {"OD": 1.000, "L": 1.13, "T": 0.095}},
-        ]
-    )
-
-    # 11. Válvulas de Bola (valves.ball_valve_2way)
-    add_catalog_family(
-        conn, template_dict=tpl_valve,
-        family_desc="Swagelok 40 Series 2-Way Ball Valve", short_desc="Swagelok Ball Valve",
-        script_name="valves.ball_valve_2way", skey="VB", pnp_class="ValveBody", category="Valves",
-        sizes_list=[
-            {"nd": 0.125, "part_num": "SS-41S2", "OD": 0.125, "params": {"OD": 0.125, "L": 2.11, "H": 1.50, "T": 0.028}},
-            {"nd": 0.250, "part_num": "SS-42S4", "OD": 0.250, "params": {"OD": 0.250, "L": 2.41, "H": 1.62, "T": 0.048}},
-            {"nd": 0.375, "part_num": "SS-43S6", "OD": 0.375, "params": {"OD": 0.375, "L": 2.82, "H": 1.88, "T": 0.065}},
-            {"nd": 0.500, "part_num": "SS-44S8", "OD": 0.500, "params": {"OD": 0.500, "L": 3.42, "H": 2.19, "T": 0.065}},
-        ]
-    )
+    # Cargar dinámicamente todas las familias desde src/families/**/*.csv
+    load_families_from_csv(conn, templates_dict)
 
     conn.close()
 
     # Eliminar copias redundantes anteriores
     remove_redundant_catalogs()
 
-    print(f"\n[OK] Catálogo Swagelok completo generado con éxito en: {OUTPUT_PCAT.resolve()}")
+    print(f"\n[OK] Catálogo desacoplado generado con éxito en: {OUTPUT_PCAT.resolve()}")
 
 
 if __name__ == "__main__":
