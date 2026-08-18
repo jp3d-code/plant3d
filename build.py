@@ -30,6 +30,8 @@ SOURCE_DIRS = [d.name for d in FAMILIES_DIR.iterdir() if d.is_dir()] if FAMILIES
 PROTECTED = {
     "__init__.py",
     "build.py",
+    "build_catalog.py",
+    "Swagelok_Catalog.pcat",
     "README.md",
     "AGENTS.md",
     ".gitignore",
