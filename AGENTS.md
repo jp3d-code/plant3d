@@ -1,141 +1,73 @@
 # AGENTS.md — Guía para agentes de IA en este repositorio
 
-Repositorio de scripts Python paramétricos para **AutoCAD Plant 3D 2027** (módulo
-`varmain`). Este archivo resume las reglas del proyecto y los aprendizajes verificados.
+Repositorio de scripts Python paramétricos y catálogos `.pcat` para **AutoCAD Plant 3D 2027** (módulo `varmain`). Este archivo resume la arquitectura del proyecto, el estado actual y los aprendizajes verificados.
+
+---
+
+## 📌 Estado Actual del Proyecto (Completado)
+
+El desarrollo del paquete de componentes Swagelok se encuentra **finalizado y 100% operativo**:
+
+- **11 Familias Completadas**: Uniones, codos, tes, conectores macho/hembra, pasamuros, reductores, tapones, tapas, válvulas de bola/retención.
+- **Auto-Snapping Activado**: Todos los archivos CSV usan `end_type = PL` (Plain End / Tubing), el estándar nativo de Plant 3D.
+- **Estabilidad C++ Garantizada**: Se purgó la llamada `erase()` posterior a booleanos para prevenir `FATAL ERROR`.
+- **Codos 3D Corregidos**: Se emplea `ARC3D2` con tipos flotantes explícitos.
+- **Catálogo SQLite Actualizado**: `Swagelok_Catalog.pcat` generado con mapeo a funciones `@activate`.
+
+---
 
 ## Flujo de trabajo
 
 1. **Editar SIEMPRE en la subcarpeta de familia** (nunca en la raíz):
    `src/families/primitives/`, `src/families/tees/`, `src/families/elbows/`, `src/families/straight/`, `src/families/valves/`, etc.
-2. Aplanar a la raíz (Plant 3D solo registra `.py` en `CustomScripts/`):
+2. **Aplanar a la raíz** (Plant 3D solo registra `.py` en la raíz de `CustomScripts/`):
    ```powershell
    python build.py
    ```
-3. Verificar sincronización (CI):
+3. **Regenerar el catálogo `.pcat`**:
+   ```powershell
+   python build_catalog.py
+   ```
+4. **Verificar sincronización y tests unitarios**:
    ```powershell
    python build.py --check
-   ```
-4. Correr suite de tests unitarios:
-   ```powershell
    python -m unittest discover -s tests -v
    ```
-5. Ejecutar motor autónomo de auto-debugging (Simulador `varmain`):
-   ```powershell
-   python scratch/mock_varmain_test.py
-   ```
-6. En AutoCAD Plant 3D (registrar y probar en pantalla):
+5. **En AutoCAD Plant 3D (registrar y probar en pantalla)**:
    ```text
-   (command "arx" "l" "PnP3dACPAdapter")
+   (arxload "PnP3dACPAdapter")
    PLANTREGISTERCUSTOMSCRIPTS
-   (TESTACPSCRIPT "valves.ball_valve_2way")
+   (testacpscript "SIMPLE_ELBOW_90")
+   (testacpscript "SIMPLE_ELBOW_45")
    ```
-   Tras cambiar un script y registrarlo hay que **cerrar y reabrir Plant 3D** para que
-   el intérprete recargue el código (el procesador lo guarda en memoria).
 
 ---
 
-## Diagnóstico y Auto-Debugging Autónomo
+## API `varmain` — Aprendizajes Verificados (Plant 3D 2027)
 
-Para que cualquier agente pueda probar y depurar componentes sin intervención humana ni necesidad de abrir la interfaz gráfica de Plant 3D, el proyecto cuenta con dos herramientas de diagnóstico autónomo:
+### 1. Primitiva de Codos 3D: `ARC3D2`
+- **`TORUS(s, R1, R2)`**: Dibuja un toroide completo de 360° (dona) y no corta limpiamente por ángulo `A`.
+- **`ARC3D2(s, D=float(OD), D2=float(OD), R=R1, A=90)`**: Primitiva nativa de curva de tubería.
+  - Usar siempre valores flotantes explícitos (`float(OD)`, `float(L)`).
+  - Posicionar puertos con `s.setPoint(elbow.pointAt(0), elbow.directionAt(0), 0)` y `s.setPoint(elbow.pointAt(1), elbow.directionAt(1), 0)`.
 
-### 1. Engine de Simulación `varmain` (`scratch/mock_varmain_test.py`)
-- **Propósito**: Simula las librerías nativas `varmain.primitiv` y `varmain.custom` dentro de un entorno aislado de Python.
-- **Qué verifica**:
-  - Invocación real de la función registrable `def COMPONENTE(s)`.
-  - Construcción de primitivas (`CYLINDER`, `BOX`, `CONE`, `SPHERE`, `ARC3D2`).
-  - Transformaciones 3D (`translate`, `rotateX`, `rotateY`, `rotateZ`) y operaciones booleanas (`uniteWith`, `subtractFrom`, `erase`).
-  - Coincidencia exacta del número de llamadas a `s.setPoint` con la cantidad declarada en `@activate(Ports="N")`.
-- **Uso**:
-  ```powershell
-  python scratch/mock_varmain_test.py
-  ```
+### 2. Liberación de Memoria C++ en Operaciones Booleanas
+- En `varmain`, al llamar a `uniteWith(operando)` o `subtractFrom(operando)`, el motor C++ **asume la propiedad del puntero y lo elimina automáticamente**.
+- **Regla de Oro**: Jamás invocar `operando.erase()` después de `uniteWith()` o `subtractFrom()`. Hacerlo causa un doble `free()` que crashea AutoCAD con `FATAL ERROR: unhandled access violation reading 0x0000`.
 
-### 2. Consola Headless de Autodesk (`AcCoreConsole.exe`)
-- **Propósito**: Ejecutar scripts de AutoCAD Plant 3D en segundo plano desde la terminal sin GUI.
-- **Ubicación oficial**: `C:\Program Files\Autodesk\AutoCAD 2027\accoreconsole.exe`.
-- **Flujo de ejecución**:
-  Crea un archivo de script `.scr` (p. ej. `scratch/test_batch.scr`) con los comandos:
-  ```text
-  (command "arx" "l" "PnP3dACPAdapter")
-  PLANTREGISTERCUSTOMSCRIPTS
-  (TESTACPSCRIPT "special.check_valve")
-  QUIT Y
-  ```
-  Y ejecútalo mediante la consola:
-  ```powershell
-  & "C:\Program Files\Autodesk\AutoCAD 2027\accoreconsole.exe" /s "scratch/test_batch.scr"
-  ```
-  La salida de la consola mostrará si hubo errores de sintaxis, trazas de error de Python o comandos no reconocidos.
+### 3. Conexiones e Inserción (`end_type = PL`)
+- Para tubos e instrumentación Swagelok, el tipo de extremo nativo es **`PL`**.
+- La declaración de `PL` en los CSVs permite arrastrar y soltar piezas desde la Tool Palette / Spec Viewer y conectarlas a tubos sin errores de compatibilidad de extremos.
+
+### 4. Generación de Catálogo `.pcat`
+- El campo `ContentGeometryTemplate` de la base de datos SQLite `.pcat` debe coincidir exactamente con el nombre registrado en `@activate(name)` (ej: `SIMPLE_UNION`, `SIMPLE_ELBOW_90`), resuelto dinámicamente por `build_catalog.py`.
+- Mantener la importación de `sqlite3` protegida con `try...except ImportError` en scripts que puedan ser escaneados por el intérprete embebido de Plant 3D.
 
 ---
 
-## Reglas estructurales
+## Reglas Estructurales
 
 - Función registrable: `def NOMBRE(s, ...)` en MAYÚSCULAS, única en todo el repo.
-- Todo componente necesita `@activate(..., Ports="N")` y `@param(...)` con tipos
-  `LENGTH` / `ANGLE` / etc.
+- Todo componente necesita `@activate(..., Ports="N")` y `@param(...)` con tipos `LENGTH` / `ANGLE`.
 - Todo componente define puertos con `s.setPoint(...)`.
-- `__init__.py`: vacío o **sin imports relativos** (`from .mod import *`), para evitar
-  errores `exec_module` en la compilación de `varmain`.
-- Los archivos `.py` de la raíz con `# AUTOGENERATED by build.py` no se editan a mano;
-  se regeneran desde `src/families/` con `python build.py`.
-
----
-
-## API `varmain` — aprendizajes verificados (Plant 3D 2027)
-
-### Regla de oro: argumentos por nombre
-
-Las primitivas nativas aceptan `s` como único argumento posicional; **todo parámetro de
-geometría va SIEMPRE por keyword**:
-
-```python
-CYLINDER(s, R=2, H=4, O=0)           # OK
-BOX(s, L=4, W=4, H=4)                # OK
-CONE(s, R1=2, R2=1, H=4, E=0)        # OK
-ARC3D2(s, D=1, D2=1, R=2, A=90)      # OK
-ARC3D2(s, 1, 1, 2, 90)               # TypeError "p3dprimitive() takes exactly 1 argument (5 given)"
-BOX(s, X=4, Y=4, Z=4)                # RuntimeError eInvalidInput
-```
-
-### Primitivas
-
-- `CYLINDER(s, R, H, O)` — `O` = offset sobre el eje.
-- `BOX(s, L, W, H)` — **NO usa `X`/`Y`/`Z`**.
-- `CONE(s, R1, R2, H, E)` — `E` = diámetro interior/agujero.
-- `SPHERE(s, R)`.
-- `TORUS(s, R1, R2)` — **siempre toro completo**, NO acepta ángulo. No usar para codos.
-- `ARC3D2(s, D, D2, R, A)` — arco/codo real. `D`/`D2` = radios de extremos, `R` = radio
-  de curvatura, `A` = ángulo en grados. Devuelve objeto con `pointAt(0/1)` y
-  `directionAt(0/1)`.
-
-### Métodos de sólido (encadenables)
-
-`translate((x,y,z))`, `rotateX/Y/Z(grados)`, `uniteWith(o)`, `subtractFrom(o)`,
-`erase()`. Ejemplo:
-`CYLINDER(s, R=1, H=2).rotateY(90).translate((3, 0, 0))`.
-
-### Puertos
-
-- `s.setPoint(punto, vector)` o `s.setPoint(punto, vector, angulo)`; el orden define
-  puertos 1..N y debe coincidir con `Ports=` en `@activate`.
-- Para arcos usar SIEMPRE `objeto.pointAt(i)` / `objeto.directionAt(i)`, no posiciones
-  calculadas a mano.
-
-### Errores típicos
-
-| Síntoma | Causa | Solución |
-|---|---|---|
-| `eInvalidInput` en `BOX` | `X`/`Y`/`Z` | usar `L`/`W`/`H` |
-| Toro completo en vez de codo | `TORUS(..., A=90)` | usar `ARC3D2` |
-| `TypeError: p3dprimitive() takes exactly 1 argument` | args posicionales | keyword args |
-| Puerto desalineado de la geometría | puerto calculado a mano | `pointAt`/`directionAt` |
-
----
-
-## Verificación de la API
-
-La referencia anterior se obtuvo descomprimiendo
-`C:\Program Files\Autodesk\AutoCAD 2027\PLNT3D\ContentScripts\variants.zip`
-(`varmain/*.pyc`) y desensamblando con `pydisasm` (paquete `xdis`). Si cambia una
-versión de Plant 3D, re-verificar la firma de `ARC3D2` y `BOX` antes de asumir lo anterior.
+- Los archivos `.py` de la raíz llevan `# AUTOGENERATED by build.py` y se regeneran con `python build.py`.

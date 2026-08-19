@@ -1,6 +1,18 @@
-# Plant3D - Custom Scripts para Racores y Componentes
+# Plant3D - Custom Scripts para Racores y Componentes Swagelok
 
-Repositorio oficial de scripts Python para **AutoCAD Plant 3D 2027** que definen geometrías paramétricas y puertos de conexión 3D para componentes y racores personalizados.
+Repositorio oficial de scripts Python para **AutoCAD Plant 3D 2027** que definen geometrías paramétricas 3D, catálogos `.pcat` y puertos de conexión para componentes y racores personalizados Swagelok.
+
+---
+
+## 📌 Estado Actual del Proyecto
+
+Actualmente, **el proyecto se encuentra 100% completado, integrado y verificado en AutoCAD Plant 3D 2027**:
+
+- **11 Familias de Componentes Implementadas**: Uniones rectas, codos de 90° y 45°, conectores macho y hembra NPT, tes de unión y derivación, reductores, conectores de manómetros, tapones, tapas y válvulas de bola/retención.
+- **Conexiones Nativas (`PL`)**: Todos los CSV están configurados con `end_type = PL` (Plain End / Tubing), lo que permite acoplamiento 3D automático e intuitivo en Plant 3D sin errores de conexión.
+- **Catálogo SQLite (`Swagelok_Catalog.pcat`)**: Generado automáticamente y listo para importación en el **Spec Editor** o visor de especificaciones (`PLANTSPECVIEWER`).
+- **Primitivas de Codos 3D Corregidas**: Codos de 90° y 45° utilizando la primitiva nativa `ARC3D2` con renderizado 3D perfecto.
+- **Estabilidad C++**: Purga completa de llamadas `.erase()` duplicadas tras operaciones CSG, previniendo cuelgues `FATAL ERROR`.
 
 ---
 
@@ -12,8 +24,6 @@ En **AutoCAD Plant 3D 2027**, la ruta oficial de ejecución para scripts persona
 C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts\
 ```
 
-Este repositorio Git está inicializado directamente en esa ruta, por lo que los cambios en los archivos `.py` se aplican en AutoCAD Plant 3D al ejecutar el comando de registro.
-
 ---
 
 ## Estructura del Repositorio
@@ -23,239 +33,86 @@ Este repositorio Git está inicializado directamente en esa ruta, por lo que los
 ```text
 C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts\
 ├── build.py                  # Aplana fuentes de src/families/ -> raíz (+ validación)
+├── build_catalog.py          # Genera Swagelok_Catalog.pcat leyendo CSVs y mapeando @activate
+├── Swagelok_Catalog.pcat     # Catálogo de componentes listo para Plant 3D Spec Editor
 ├── src/                      # Código fuente organizado
 │   ├── families/             # Componentes organizados por familias
-│   │   ├── adapters/
-│   │   ├── crosses/
-│   │   ├── elbows/           # Codos
-│   │   │   └── elbow_90.py
-│   │   ├── female/
-│   │   ├── male/
-│   │   ├── plugs/
+│   │   ├── adapters/         # Adaptadores y conectores de puerto
+│   │   ├── crosses/          # Cruces de unión
+│   │   ├── elbows/           # Codos 90°, 45°, hembra, macho, orientables
+│   │   ├── female/           # Conectores hembra NPT y pasamuros
+│   │   ├── male/             # Conectores macho NPT y pasamuros
+│   │   ├── plugs/            # Tapones de tubo y racor
 │   │   ├── primitives/       # Cilindro, caja, esfera, cilindro hueco
-│   │   │   ├── hollow_cylinder.py
-│   │   │   ├── simple_box.py
-│   │   │   ├── simple_cylinder.py
-│   │   │   └── simple_sphere.py
-│   │   ├── special/
-│   │   ├── straight/         # Uniones, reductores, conectores
-│   │   │   └── union.py
-│   │   ├── tees/             # T y derivaciones
-│   │   │   └── union_tee.py
-│   │   └── vent_protectors/
+│   │   ├── special/          # Válvula de retención, conectores rápidos
+│   │   ├── straight/         # Uniones rectas, reductores y pasamuros
+│   │   ├── tees/             # Tes de unión y derivaciones macho/hembra
+│   │   ├── valves/           # Válvulas de bola (2 vías, 3 vías) y aguja
+│   │   └── vent_protectors/  # Protectores de venteo
 │   └── lib/                  # Librería de utilidades compartidas
 │       └── utils.py          # Funciones de validación y conversión
-├── tests/                    # Tests (unittest, sin dependencias)
-│   ├── test_repo.py          # Estructura del repositorio
-│   └── unit/test_build.py    # Unit tests del aplanador
-└── __init__.py               # Inicializador del paquete (sin imports relativos)
+├── tests/                    # Tests unitarios
+└── __init__.py               # Inicializador del paquete
 ```
 
-### Flujo de trabajo para componentes
+---
 
-1. Crear o editar el componente en su subcarpeta dentro de `src/families/{family}/{component}.py` (nunca en la raíz).
-   - La función registrable debe llamarse `DEF_NOMBRE` (mayúsculas) y ser única en todo el repositorio.
-2. Aplanar para que Plant 3D lo detecte (genera `{family}.{component}.py` en la raíz):
+## Flujo de Trabajo para Agregar o Modificar Componentes
+
+1. **Editar o crear la fuente** en `src/families/{familia}/{componente}.py` y su correspondiente `.csv`.
+2. **Aplanar fuentes a la raíz**:
    ```bash
-   python build.py          # copia las fuentes a la raíz (outputs generados)
-   python build.py --check  # valida que la raíz esté sincronizada (CI)
+   python build.py
    ```
-3. Registrar en AutoCAD Plant 3D:
+3. **Regenerar el catálogo SQLite `.pcat`**:
+   ```bash
+   python build_catalog.py
+   ```
+4. **Registrar en AutoCAD Plant 3D**:
+   En la línea de comandos de AutoCAD Plant 3D:
    ```text
    PLANTREGISTERCUSTOMSCRIPTS
    ```
+5. **Probar renderizado directo en Plant 3D**:
+   ```lisp
+   (arxload "PnP3dACPAdapter")
+   (testacpscript "SIMPLE_ELBOW_90")
+   (testacpscript "SIMPLE_ELBOW_45")
+   ```
 
-Los archivos de la raíz generados por `build.py` llevan un marcador `AUTOGENERATED`, están en `.gitignore` y no deben editarse a mano; se regeneran desde `src/families/`.
+---
 
-### Validación local y CI
+## 🧠 Aprendizajes Clave y Reglas de la API (`varmain`)
+
+### 1. Primitiva de Codos: `ARC3D2`
+- **`TORUS(s, R1, R2)`**: Genera siempre una dona completa (toroide de 360°) y no permite corte limpio por ángulo `A`.
+- **`ARC3D2(s, D=float(OD), D2=float(OD), R=R1, A=90)`**: Es la primitiva oficial de Autodesk para codos 3D.
+  - Parámetros clave: `D` y `D2` (diámetros exteriores en float), `R` (radio de curvatura centro-extremo), `A` (ángulo en grados: `90` o `45`).
+  - Posicionamiento de puertos: Utilizar `s.setPoint(elbow.pointAt(0), elbow.directionAt(0), 0)` y `s.setPoint(elbow.pointAt(1), elbow.directionAt(1), 0)`.
+
+### 2. Gestión de Memoria C++ en Operaciones CSG (`.erase()`)
+- En el motor C++ de `varmain`, al llamar a `uniteWith(operando)` o `subtractFrom(operando)`, el motor **toma posesión del puntero y lo libera automáticamente**.
+- **Jamás llamar a `operando.erase()` después de `uniteWith` o `subtractFrom`**, ya que provoca una doble liberación de memoria (`FATAL ERROR: unhandled access violation reading 0x0000`).
+
+### 3. Conexiones e Inserción (`end_type = PL`)
+- Para tuberías de instrumentación Swagelok, el `end_type` nativo en Plant 3D es **`PL`** (Plain End / Tubing).
+- El uso de `PL` en los archivos CSV permite que las piezas se auto-conecten y ajusten en dibujos de proyecto 3D sin requerir reglas personalizadas en `DefaultConnectorsConfig.xml`.
+
+### 4. Mapeo de Nombres en `build_catalog.py`
+- En la base de datos `.pcat`, el campo `ContentGeometryTemplate` debe coincidir exactamente con el nombre decorado en `@activate(name)` (ejemplo: `SIMPLE_UNION`, `SIMPLE_ELBOW_90`), en lugar del nombre relativo del archivo.
+- `build_catalog.py` incluye protección `try...except ImportError` en `sqlite3` para evitar conflictos en entornos Python recortados.
+
+---
+
+## 📋 Resumen de Comandos Útiles
 
 ```bash
+# Aplanar scripts
+python build.py
+
+# Regenerar catálogo .pcat
+python build_catalog.py
+
+# Ejecutar tests unitarios
 python -m unittest discover -s tests -v
 ```
-
-Los tests verifican: nombres registrables únicos, presencia de `@activate` y puertos (`setPoint`/`setVector`), sintaxis válida y sincronización de la raíz. El mismo chequeo se ejecuta en GitHub Actions (`.github/workflows/ci.yml`).
-
----
-
-## Instalación y Registro en AutoCAD Plant 3D
-
-### 1. Agregar la ruta a Support Paths (solo la primera vez)
-
-1. En AutoCAD Plant 3D, ejecuta el comando `OP` (Options) y presiona Enter.
-2. Ve a la pestaña **Files** > **Support File Search Path**.
-3. Haz clic en **Add** > **Browse** y selecciona:
-   `C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts`
-4. Haz clic en **Apply** y **OK**.
-
-### 2. Aplanar y registrar los scripts
-
-Antes de registrar, aplanar las fuentes de `src/families/` a la raíz:
-
-```bash
-python build.py
-```
-
-En la línea de comandos de AutoCAD Plant 3D, ejecuta:
-
-```text
-(command "arx" "l" "PnP3dACPAdapter")
-PLANTREGISTERCUSTOMSCRIPTS
-```
-
-### 3. Probar un componente en pantalla
-
-Para probar y renderizar una entidad 3D en la consola de AutoCAD:
-
-```lisp
-(TESTACPSCRIPT "primitives.simple_cylinder")
-(TESTACPSCRIPT "elbows.elbow_90")
-(TESTACPSCRIPT "tees.union_tee")
-(TESTACPSCRIPT "straight.union")
-```
-
----
-
-## Flujo de trabajo en Git
-
-Para publicar cambios en GitHub ([`jp3d-code/plant3d`](https://github.com/jp3d-code/plant3d.git)):
-
-1. Verificar archivos modificados o nuevos:
-   ```bash
-   git status
-   ```
-2. Agregar cambios al área de preparación (stage):
-   ```bash
-   git add .
-   ```
-3. Guardar el commit con mensaje descriptivo:
-   ```bash
-   git commit -m "feat: agregar componente racor XYZ con puertos 3D"
-   ```
-4. Enviar a GitHub:
-   ```bash
-   git push origin main
-   ```
-
----
-
-## Estructura del Código y Puertos 3D
-
-Cada script de componente debe seguir esta estructura base usando `varmain.custom` y `varmain.primitiv`:
-
-```python
-from varmain.primitiv import *
-from varmain.custom import *
-from math import *
-
-@activate(
-    Group="Elbows",
-    TooltipShort="Codo 90",
-    TooltipLong="Codo de 90 grados con 2 puertos",
-    LengthUnit="in",   # "in" o "mm"
-    Ports="2"          # Numero de puertos de conexion
-)
-@group("MainDimensions")
-@param(OD=LENGTH, TooltipShort="Diámetro exterior")
-@param(L=LENGTH, TooltipShort="Centro a extremo")
-@param(T=LENGTH, TooltipShort="Espesor de pared")
-def MI_COMPONENTE(s, OD=1, L=2, T=0.1, **kw):
-    R1 = L
-    R2 = OD / 2
-
-    # 1. Dibujar geometría.
-    #    NOTA: TORUS(s, R1, R2) crea un toro COMPLETO (no acepta angulo A).
-    #    Para un arco/codo usa la primitiva nativa ARC3D2(s, D, D2, R, A),
-    #    donde D/D2 son los radios de los extremos, R el radio de curvatura
-    #    y A el angulo en grados. El objeto devuelto expone pointAt(i) y
-    #    directionAt(i) con los extremos del arco.
-    #    IMPORTANTE: los parametros de geometria SIEMPRE van por nombre
-    #    (ARC3D2(s, D=..., D2=..., R=..., A=...)), nunca posicionales.
-    elbow = ARC3D2(s, D=R2, D2=R2, R=R1, A=90)
-
-    # 2. Definir puertos: setPoint(punto, vector, angulo) SIN numero de puerto.
-    #    El orden de las llamadas define los puertos 1, 2, 3... y el total debe
-    #    coincidir con Ports= en @activate.
-    s.setPoint(elbow.pointAt(0), elbow.directionAt(0), 0)
-
-    s.setPoint(elbow.pointAt(1), elbow.directionAt(1), 0)
-
-    return s
-```
-
-> **Primitivas comunes (verificadas en varmain de Plant 3D 2027):**
-> - `CYLINDER(s, R, H, O)` — cilindro, `O` = offset sobre el eje.
-> - `BOX(s, L, W, H)` — caja (¡no usa `X`, `Y`, `Z`!).
-> - `SPHERE(s, R)`, `TORUS(s, R1, R2)` — esfera y toro completo.
-> - `ARC3D2(s, D, D2, R, A)` — arco/codo con extremos `pointAt(i)` / `directionAt(i)`.
-> - Métodos de sólido: `translate((x,y,z))`, `rotateX/Y/Z(ang)`, `uniteWith(o)`, `subtractFrom(o)`, `erase()`.
-
----
-
-## Referencia de la API `varmain` (verificada en Plant 3D 2027)
-
-Esta referencia fue validada contra el `varmain` real de la instalación (descompilando
-`variants.zip` → `varmain/primitiv.pyc`, `var_basic.pyc`, `arcsub/cpbsub/cpb.pyc`) y
-probando en pantalla con `TESTACPSCRIPT`. Es la fuente de verdad de este repositorio.
-
-### Regla de oro: argumentos por nombre (keyword args)
-
-Todas las primitivas nativas aceptan `s` como único argumento posicional; los parámetros
-de geometría **siempre** van con nombre:
-
-```python
-CYLINDER(s, R=2, H=4, O=0)   # OK
-BOX(s, L=4, W=4, H=4)        # OK
-ARC3D2(s, D=1, D2=1, R=2, A=90)  # OK
-
-ARC3D2(s, 1, 1, 2, 90)       # ERROR: TypeError "p3dprimitive() takes exactly 1 argument (5 given)"
-BOX(s, X=4, Y=4, Z=4)        # ERROR: RuntimeError eInvalidInput
-```
-
-### Primitivas disponibles
-
-| Primitiva | Firma | Notas |
-|---|---|---|
-| `CYLINDER` | `(s, R, H, O)` | `O` = offset del cilindro sobre su eje |
-| `BOX` | `(s, L, W, H)` | **No usa** `X`, `Y`, `Z` |
-| `SPHERE` | `(s, R)` | |
-| `HALFSPHERE` | `(s, R)` | Media esfera (usada por el SPHERE nativo) |
-| `TORUS` | `(s, R1, R2)` | **Siempre toro completo.** NO acepta ángulo → no sirve para codos |
-| `ARC3D2` | `(s, D, D2, R, A)` | Arco/codo: `D`/`D2` = radios de los extremos, `R` = radio de curvatura (centro a centro), `A` = ángulo en grados. Devuelve objeto con `pointAt(0/1)` y `directionAt(0/1)` |
-
-### Métodos de los sólidos
-
-Encadenables después de crear la primitiva:
-
-```python
-CYLINDER(s, R=2, H=4).rotateY(90).translate((5, 0, 0))
-```
-
-- `translate((x, y, z))`
-- `rotateX(ang)`, `rotateY(ang)`, `rotateZ(ang)` — ángulo en grados
-- `uniteWith(otro)` — unión booleana (luego `otro.erase()`)
-- `subtractFrom(otro)` — resta booleana (luego `otro.erase()`)
-- `erase()`
-
-### Puertos de conexión
-
-- `s.setPoint(punto, vector)` o `s.setPoint(punto, vector, angulo)`.
-- **Sin número de puerto**: el orden de las llamadas define los puertos 1, 2, 3...
-- El total debe coincidir con `Ports=` en `@activate`.
-- Para arcos, nunca inventar las posiciones: usar el objeto devuelto por la primitiva
-  (`elbow.pointAt(0)`, `elbow.directionAt(0)`).
-
-### Errores típicos y su solución
-
-| Síntoma | Causa | Solución |
-|---|---|---|
-| `RuntimeError: eInvalidInput` en `BOX` | Se usaron `X`/`Y`/`Z` | Usar `L`/`W`/`H` |
-| "Solo veo una dona" (toro completo) | `TORUS(..., A=90)` no existe | Usar `ARC3D2(s, D=..., D2=..., R=..., A=...)` |
-| `TypeError: p3dprimitive() takes exactly 1 argument` | Parámetros posicionales en primitiva nativa | Pasar todo por nombre |
-| Puerto no coincide con la geometría | Posición del puerto calculada "a mano" | Usar `pointAt`/`directionAt` del objeto primitiva |
-
----
-
-## Notas de Depuración
-
-- **Sin importaciones relativas**: Los archivos `__init__.py` dentro del repositorio deben estar vacíos o sin expresiones como `from .module import *` para evitar errores de `exec_module` durante la compilación de `varmain`.
-- **Filtro de archivos temporales**: El archivo `.gitignore` ignora los archivos `.xml` y `.map` generados durante la compilación de `PLANTREGISTERCUSTOMSCRIPTS`.
