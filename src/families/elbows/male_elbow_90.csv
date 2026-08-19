@@ -1,6 +1,6 @@
 nd,part_num,OD,L,H,T,OD1,ports_count,end_type,skey,pnp_class,category,family_desc,short_desc
-0.1250,SS-200-2-2,0.1250,0.88,0.72,0.028,,2,SWAGELOK,EL,Elbow,Fittings,Swagelok 90° Male NPT Elbow,Swagelok Male Elbow
-0.2500,SS-400-2-4,0.2500,1.06,1.00,0.048,,2,SWAGELOK,EL,Elbow,Fittings,Swagelok 90° Male NPT Elbow,Swagelok Male Elbow
-0.3750,SS-600-2-6,0.3750,1.20,1.14,0.065,,2,SWAGELOK,EL,Elbow,Fittings,Swagelok 90° Male NPT Elbow,Swagelok Male Elbow
-0.5000,SS-810-2-8,0.5000,1.42,1.50,0.065,,2,SWAGELOK,EL,Elbow,Fittings,Swagelok 90° Male NPT Elbow,Swagelok Male Elbow
-1.0000,SS-1610-2-16,1.0000,1.93,1.90,0.095,,2,SWAGELOK,EL,Elbow,Fittings,Swagelok 90° Male NPT Elbow,Swagelok Male Elbow
+0.1250,SS-200-2-2,0.1250,0.88,0.72,0.028,,2,PL,EL,Elbow,Fittings,Swagelok 90° Male NPT Elbow,Swagelok Male Elbow
+0.2500,SS-400-2-4,0.2500,1.06,1.00,0.048,,2,PL,EL,Elbow,Fittings,Swagelok 90° Male NPT Elbow,Swagelok Male Elbow
+0.3750,SS-600-2-6,0.3750,1.20,1.14,0.065,,2,PL,EL,Elbow,Fittings,Swagelok 90° Male NPT Elbow,Swagelok Male Elbow
+0.5000,SS-810-2-8,0.5000,1.42,1.50,0.065,,2,PL,EL,Elbow,Fittings,Swagelok 90° Male NPT Elbow,Swagelok Male Elbow
+1.0000,SS-1610-2-16,1.0000,1.93,1.90,0.095,,2,PL,EL,Elbow,Fittings,Swagelok 90° Male NPT Elbow,Swagelok Male Elbow

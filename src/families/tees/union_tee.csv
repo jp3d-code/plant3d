@@ -1,10 +1,10 @@
 nd,part_num,OD,L,H,T,OD1,ports_count,end_type,skey,pnp_class,category,family_desc,short_desc
-0.0625,SS-100-3,0.0625,1.40,0.70,0.010,,3,SWAGELOK,TE,Tee,Fittings,Swagelok Union Tee,Swagelok Union Tee
-0.1250,SS-200-3,0.1250,1.76,0.88,0.028,,3,SWAGELOK,TE,Tee,Fittings,Swagelok Union Tee,Swagelok Union Tee
-0.1875,SS-300-3,0.1875,1.92,0.96,0.030,,3,SWAGELOK,TE,Tee,Fittings,Swagelok Union Tee,Swagelok Union Tee
-0.2500,SS-400-3,0.2500,2.12,1.06,0.048,,3,SWAGELOK,TE,Tee,Fittings,Swagelok Union Tee,Swagelok Union Tee
-0.3125,SS-500-3,0.3125,2.34,1.17,0.055,,3,SWAGELOK,TE,Tee,Fittings,Swagelok Union Tee,Swagelok Union Tee
-0.3750,SS-600-3,0.3750,2.40,1.20,0.065,,3,SWAGELOK,TE,Tee,Fittings,Swagelok Union Tee,Swagelok Union Tee
-0.5000,SS-810-3,0.5000,2.84,1.42,0.065,,3,SWAGELOK,TE,Tee,Fittings,Swagelok Union Tee,Swagelok Union Tee
-0.7500,SS-1210-3,0.7500,3.14,1.57,0.075,,3,SWAGELOK,TE,Tee,Fittings,Swagelok Union Tee,Swagelok Union Tee
-1.0000,SS-1610-3,1.0000,3.86,1.93,0.095,,3,SWAGELOK,TE,Tee,Fittings,Swagelok Union Tee,Swagelok Union Tee
+0.0625,SS-100-3,0.0625,1.40,0.70,0.010,,3,PL,TE,Tee,Fittings,Swagelok Union Tee,Swagelok Union Tee
+0.1250,SS-200-3,0.1250,1.76,0.88,0.028,,3,PL,TE,Tee,Fittings,Swagelok Union Tee,Swagelok Union Tee
+0.1875,SS-300-3,0.1875,1.92,0.96,0.030,,3,PL,TE,Tee,Fittings,Swagelok Union Tee,Swagelok Union Tee
+0.2500,SS-400-3,0.2500,2.12,1.06,0.048,,3,PL,TE,Tee,Fittings,Swagelok Union Tee,Swagelok Union Tee
+0.3125,SS-500-3,0.3125,2.34,1.17,0.055,,3,PL,TE,Tee,Fittings,Swagelok Union Tee,Swagelok Union Tee
+0.3750,SS-600-3,0.3750,2.40,1.20,0.065,,3,PL,TE,Tee,Fittings,Swagelok Union Tee,Swagelok Union Tee
+0.5000,SS-810-3,0.5000,2.84,1.42,0.065,,3,PL,TE,Tee,Fittings,Swagelok Union Tee,Swagelok Union Tee
+0.7500,SS-1210-3,0.7500,3.14,1.57,0.075,,3,PL,TE,Tee,Fittings,Swagelok Union Tee,Swagelok Union Tee
+1.0000,SS-1610-3,1.0000,3.86,1.93,0.095,,3,PL,TE,Tee,Fittings,Swagelok Union Tee,Swagelok Union Tee

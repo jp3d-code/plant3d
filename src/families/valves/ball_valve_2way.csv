@@ -1,5 +1,5 @@
 nd,part_num,OD,L,H,T,OD1,ports_count,end_type,skey,pnp_class,category,family_desc,short_desc
-0.1250,SS-41S2,0.1250,2.11,1.50,0.028,,2,SWAGELOK,VB,ValveBody,Valves,Swagelok 40 Series 2-Way Ball Valve,Swagelok Ball Valve
-0.2500,SS-42S4,0.2500,2.41,1.62,0.048,,2,SWAGELOK,VB,ValveBody,Valves,Swagelok 40 Series 2-Way Ball Valve,Swagelok Ball Valve
-0.3750,SS-43S6,0.3750,2.82,1.88,0.065,,2,SWAGELOK,VB,ValveBody,Valves,Swagelok 40 Series 2-Way Ball Valve,Swagelok Ball Valve
-0.5000,SS-44S8,0.5000,3.42,2.19,0.065,,2,SWAGELOK,VB,ValveBody,Valves,Swagelok 40 Series 2-Way Ball Valve,Swagelok Ball Valve
+0.1250,SS-41S2,0.1250,2.11,1.50,0.028,,2,PL,VB,ValveBody,Valves,Swagelok 40 Series 2-Way Ball Valve,Swagelok Ball Valve
+0.2500,SS-42S4,0.2500,2.41,1.62,0.048,,2,PL,VB,ValveBody,Valves,Swagelok 40 Series 2-Way Ball Valve,Swagelok Ball Valve
+0.3750,SS-43S6,0.3750,2.82,1.88,0.065,,2,PL,VB,ValveBody,Valves,Swagelok 40 Series 2-Way Ball Valve,Swagelok Ball Valve
+0.5000,SS-44S8,0.5000,3.42,2.19,0.065,,2,PL,VB,ValveBody,Valves,Swagelok 40 Series 2-Way Ball Valve,Swagelok Ball Valve
