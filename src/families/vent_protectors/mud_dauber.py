@@ -25,7 +25,6 @@ def VENT_PROTECTOR(s, A=0.78, E=0.28, F=0.5625, **kw):
     body = CYLINDER(s, R=Rhex, H=A)
     bore = CYLINDER(s, R=Rbore, H=A)
     body.subtractFrom(bore)
-    bore.erase()
 
     s.setPoint((0, 0, 0), (0, 0, -1), 0)
     return s

@@ -35,19 +35,16 @@ def BULKHEAD_MALE_CONNECTOR(s, A=2.17, D=0.60, E=0.19, F=0.625, NL=0.30, **kw):
     nut = CYLINDER(s, R=Rnut, H=NL)
     nut.translate((0, 0, -NL / 2))
     body.uniteWith(nut)
-    nut.erase()
 
     # Conicidad NPT en extremo macho (-halfA)
     thread = CONE(s, R1=Rbody * 0.92, R2=Rbody * 1.05, H=thread_len, E=0.0)
     thread.translate((0, 0, -halfA))
     body.uniteWith(thread)
-    thread.erase()
 
     # Perforación interna pasante
     bore = CYLINDER(s, R=Rbore, H=A)
     bore.translate((0, 0, -halfA))
     body.subtractFrom(bore)
-    bore.erase()
 
     s.setPoint((0, 0, halfA), (0, 0, 1), 0)
     s.setPoint((0, 0, -halfA), (0, 0, -1), 0)

@@ -33,19 +33,16 @@ def CHECK_VALVE(s, A=2.40, D=0.60, F=0.875, E=0.19, **kw):
     hex_body = CYLINDER(s, R=Rhex, H=valve_len)
     hex_body.translate((0, 0, -valve_len / 2))
     body.uniteWith(hex_body)
-    hex_body.erase()
 
     # Resalte indicador de sentido de flujo (anillo exterior en el lado de salida P1)
     arrow_ring = CYLINDER(s, R=Rhex + 0.05, H=A * 0.08)
     arrow_ring.translate((0, 0, valve_len * 0.25))
     body.uniteWith(arrow_ring)
-    arrow_ring.erase()
 
     # Perforación pasante interior
     bore = CYLINDER(s, R=Rbore, H=A)
     bore.translate((0, 0, -halfA))
     body.subtractFrom(bore)
-    bore.erase()
 
     s.setPoint((0, 0, halfA), (0, 0, 1), 0)
     s.setPoint((0, 0, -halfA), (0, 0, -1), 0)

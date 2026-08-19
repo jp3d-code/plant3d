@@ -32,12 +32,10 @@ def BULKHEAD_UNION(s, A=2.27, D=0.60, E=0.19, F=0.625, NL=0.30, **kw):
     nut = CYLINDER(s, R=Rnut, H=NL)
     nut.translate((0, 0, -NL / 2))
     body.uniteWith(nut)
-    nut.erase()
 
     bore = CYLINDER(s, R=Rbore, H=totalLen)
     bore.translate((0, 0, -A))
     body.subtractFrom(bore)
-    bore.erase()
 
     s.setPoint((0, 0, -A), (0, 0, -1), 0)
     s.setPoint((0, 0, A), (0, 0, 1), 0)

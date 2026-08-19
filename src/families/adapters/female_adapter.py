@@ -34,13 +34,11 @@ def FEMALE_ADAPTER(s, A=1.50, D=0.375, DX=0.54, E=0.17, **kw):
     ring = CYLINDER(s, R=Rfemale + 0.04, H=ring_height)
     ring.translate((0, 0, -ring_height / 2))
     body.uniteWith(ring)
-    ring.erase()
 
     # Perforación interna pasante
     bore = CYLINDER(s, R=Rbore, H=A)
     bore.translate((0, 0, -halfA))
     body.subtractFrom(bore)
-    bore.erase()
 
     s.setPoint((0, 0, halfA), (0, 0, 1), 0)
     s.setPoint((0, 0, -halfA), (0, 0, -1), 0)

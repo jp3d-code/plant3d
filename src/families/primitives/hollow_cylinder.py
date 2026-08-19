@@ -24,6 +24,5 @@ def HOLLOW_CYLINDER(s, RO=3, RI=2, H=4, **kw):
     s_outer = CYLINDER(s, R=RO, H=H)
     hole = CYLINDER(s, R=RI, H=H)
     s_outer.subtractFrom(hole)
-    hole.erase()
     s.setPoint((0, 0, 0), (0, 0, 1), 0)
     return s

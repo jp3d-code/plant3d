@@ -30,7 +30,6 @@ def REDUCING_UNION(s, A=1.52, D=0.60, DX=0.50, E=0.09, **kw):
     bore = CYLINDER(s, R=Rbore, H=A * 2)
     bore.translate((0, 0, -A))
     body.subtractFrom(bore)
-    bore.erase()
 
     s.setPoint((0, 0, A), (0, 0, 1), 0)
     s.setPoint((0, 0, -A), (0, 0, -1), 0)

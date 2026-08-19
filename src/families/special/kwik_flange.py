@@ -36,19 +36,16 @@ def KWIK_FLANGE(s, A=1.57, B=0.37, C=0.60, G=0.98, F=0.8125, E=0.19, **kw):
     hex_nut = CYLINDER(s, R=Rhex, H=A * 0.25)
     hex_nut.translate((0, 0, -A * 0.125))
     body.uniteWith(hex_nut)
-    hex_nut.erase()
 
     # Plato de la brida sanitaria Kwik en P2 (-halfA)
     flange = CYLINDER(s, R=Rflange, H=B)
     flange.translate((0, 0, -halfA))
     body.uniteWith(flange)
-    flange.erase()
 
     # Perforación interna pasante
     bore = CYLINDER(s, R=Rbore, H=A)
     bore.translate((0, 0, -halfA))
     body.subtractFrom(bore)
-    bore.erase()
 
     s.setPoint((0, 0, halfA), (0, 0, 1), 0)
     s.setPoint((0, 0, -halfA), (0, 0, -1), 0)

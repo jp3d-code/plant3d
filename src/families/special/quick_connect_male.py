@@ -33,19 +33,16 @@ def QUICK_CONNECT_MALE(s, A=1.80, D=0.50, F=0.625, E=0.19, **kw):
     stem = CYLINDER(s, R=Rstem, H=stem_len)
     stem.translate((0, 0, -halfA))
     body.uniteWith(stem)
-    stem.erase()
 
     # Valona / Anillo de retención
     ring = CYLINDER(s, R=Rstem + 0.05, H=A * 0.08)
     ring.translate((0, 0, -halfA + stem_len * 0.7))
     body.uniteWith(ring)
-    ring.erase()
 
     # Perforación pasante interior
     bore = CYLINDER(s, R=Rbore, H=A)
     bore.translate((0, 0, -halfA))
     body.subtractFrom(bore)
-    bore.erase()
 
     s.setPoint((0, 0, halfA), (0, 0, 1), 0)
     s.setPoint((0, 0, -halfA), (0, 0, -1), 0)

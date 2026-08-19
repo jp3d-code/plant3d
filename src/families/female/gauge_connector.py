@@ -31,12 +31,10 @@ def GAUGE_CONNECTOR(s, A=1.60, D=0.60, E=0.19, F=0.875, **kw):
     hex_head = CYLINDER(s, R=Rhex, H=A / 2)
     hex_head.translate((0, 0, -halfA))
     body.uniteWith(hex_head)
-    hex_head.erase()
 
     bore = CYLINDER(s, R=Rbore, H=A)
     bore.translate((0, 0, -halfA))
     body.subtractFrom(bore)
-    bore.erase()
 
     s.setPoint((0, 0, halfA), (0, 0, 1), 0)
     s.setPoint((0, 0, -halfA), (0, 0, -1), 0)

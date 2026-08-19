@@ -34,13 +34,11 @@ def REDUCING_PORT_CONNECTOR(s, A=1.35, D=0.50, DX=0.375, E=0.17, **kw):
     ring = CYLINDER(s, R=R1 + 0.05, H=ring_height)
     ring.translate((0, 0, -ring_height / 2))
     body.uniteWith(ring)
-    ring.erase()
 
     # Perforación interna pasante
     bore = CYLINDER(s, R=Rbore, H=A)
     bore.translate((0, 0, -halfA))
     body.subtractFrom(bore)
-    bore.erase()
 
     s.setPoint((0, 0, halfA), (0, 0, 1), 0)
     s.setPoint((0, 0, -halfA), (0, 0, -1), 0)

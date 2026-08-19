@@ -33,13 +33,11 @@ def QUICK_CONNECT_FEMALE(s, A=2.10, D=0.50, F=0.875, E=0.19, **kw):
     sleeve = CYLINDER(s, R=Rsleeve, H=sleeve_len)
     sleeve.translate((0, 0, -halfA))
     body.uniteWith(sleeve)
-    sleeve.erase()
 
     # Perforación pasante interior
     bore = CYLINDER(s, R=Rbore, H=A)
     bore.translate((0, 0, -halfA))
     body.subtractFrom(bore)
-    bore.erase()
 
     s.setPoint((0, 0, halfA), (0, 0, 1), 0)
     s.setPoint((0, 0, -halfA), (0, 0, -1), 0)

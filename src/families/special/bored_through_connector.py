@@ -34,19 +34,16 @@ def BORED_THROUGH_CONNECTOR(s, A=1.49, D=0.60, F=0.5625, **kw):
     nut = CYLINDER(s, R=Rnut, H=A * 0.3)
     nut.translate((0, 0, -A * 0.15))
     body.uniteWith(nut)
-    nut.erase()
 
     # Conicidad NPT en extremo macho
     thread = CONE(s, R1=Rbody * 0.95, R2=Rbody * 1.10, H=thread_len, E=0.0)
     thread.translate((0, 0, -halfA))
     body.uniteWith(thread)
-    thread.erase()
 
     # Perforación pasante completa (BT)
     bore = CYLINDER(s, R=Rbore, H=A * 1.1)
     bore.translate((0, 0, -halfA * 1.05))
     body.subtractFrom(bore)
-    bore.erase()
 
     s.setPoint((0, 0, halfA), (0, 0, 1), 0)
     s.setPoint((0, 0, -halfA), (0, 0, -1), 0)

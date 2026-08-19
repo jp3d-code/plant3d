@@ -33,20 +33,17 @@ def BALL_VALVE_3WAY(s, A=2.40, D=0.60, H=1.50, W=2.0, E=0.19, **kw):
     center_block = BOX(s, L=block_size, W=block_size, H=block_size)
     center_block.translate((-block_size / 2, -block_size / 2, -block_size / 2))
     body.uniteWith(center_block)
-    center_block.erase()
 
     # 3. Ramal de la tercera vía a 90° en Y
     branch = CYLINDER(s, R=Rbody, H=halfA)
     branch.rotateX(-90)
     body.uniteWith(branch)
-    branch.erase()
 
     # 4. Cuello del bonete vertical en X
     stem_r = Rbody * 0.7
     stem = CYLINDER(s, R=stem_r, H=H)
     stem.rotateY(90)
     body.uniteWith(stem)
-    stem.erase()
 
     # 5. Palanca selectora superior
     handle_w = W
@@ -55,7 +52,6 @@ def BALL_VALVE_3WAY(s, A=2.40, D=0.60, H=1.50, W=2.0, E=0.19, **kw):
     handle = BOX(s, L=handle_d, W=handle_w, H=handle_h)
     handle.translate((-handle_d / 2, -handle_w * 0.2, H))
     body.uniteWith(handle)
-    handle.erase()
 
     s.setPoint((0, 0, -halfA), (0, 0, -1), 0)
     s.setPoint((0, 0, halfA), (0, 0, 1), 0)

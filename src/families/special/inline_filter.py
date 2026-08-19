@@ -33,13 +33,11 @@ def INLINE_FILTER(s, A=2.15, D=0.60, F=0.75, E=0.19, **kw):
     filter_body = CYLINDER(s, R=Rfilter, H=filter_len)
     filter_body.translate((0, 0, -filter_len / 2))
     body.uniteWith(filter_body)
-    filter_body.erase()
 
     # Perforación pasante interior
     bore = CYLINDER(s, R=Rbore, H=A)
     bore.translate((0, 0, -halfA))
     body.subtractFrom(bore)
-    bore.erase()
 
     s.setPoint((0, 0, halfA), (0, 0, 1), 0)
     s.setPoint((0, 0, -halfA), (0, 0, -1), 0)

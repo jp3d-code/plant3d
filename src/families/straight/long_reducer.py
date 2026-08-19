@@ -31,7 +31,6 @@ def LONG_REDUCER(s, A=2.57, D=0.66, DX=0.50, E=0.25, **kw):
     bore = CYLINDER(s, R=Rbore, H=A)
     bore.translate((0, 0, -halfA))
     body.subtractFrom(bore)
-    bore.erase()
 
     s.setPoint((0, 0, halfA), (0, 0, 1), 0)
     s.setPoint((0, 0, -halfA), (0, 0, -1), 0)

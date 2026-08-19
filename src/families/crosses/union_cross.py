@@ -32,26 +32,22 @@ def UNION_CROSS(s, A=2.12, D=0.60, E=0.19, **kw):
     center_block = BOX(s, L=block_size, W=block_size, H=block_size)
     center_block.translate((-block_size / 2, -block_size / 2, -block_size / 2))
     main.uniteWith(center_block)
-    center_block.erase()
 
     # Tramo transversal en X
     branch = CYLINDER(s, R=Rbody, H=totalLen)
     branch.translate((0, 0, -A))
     branch.rotateY(90)
     main.uniteWith(branch)
-    branch.erase()
 
     # Perforaciones internas pasantes
     boreZ = CYLINDER(s, R=Rbore, H=totalLen)
     boreZ.translate((0, 0, -A))
     main.subtractFrom(boreZ)
-    boreZ.erase()
 
     boreX = CYLINDER(s, R=Rbore, H=totalLen)
     boreX.translate((0, 0, -A))
     boreX.rotateY(90)
     main.subtractFrom(boreX)
-    boreX.erase()
 
     s.setPoint((0, 0, -A), (0, 0, -1), 0)
     s.setPoint((0, 0, A), (0, 0, 1), 0)

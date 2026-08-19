@@ -34,14 +34,12 @@ def NEEDLE_VALVE(s, A=2.10, D=0.60, H=1.80, W=1.20, E=0.19, **kw):
     center_block = BOX(s, L=block_size, W=block_size, H=block_size)
     center_block.translate((-block_size / 2, -block_size / 2, -block_size / 2))
     body.uniteWith(center_block)
-    center_block.erase()
 
     # 3. Bonete/Cuello vertical de regulación en X
     stem_r = Rbody * 0.65
     stem = CYLINDER(s, R=stem_r, H=H)
     stem.rotateY(90)
     body.uniteWith(stem)
-    stem.erase()
 
     # 4. Volante giratorio circular superior en (H, 0, 0)
     wheel_h = Rbody * 0.4
@@ -49,13 +47,11 @@ def NEEDLE_VALVE(s, A=2.10, D=0.60, H=1.80, W=1.20, E=0.19, **kw):
     wheel.rotateY(90)
     wheel.translate((H, 0, 0))
     body.uniteWith(wheel)
-    wheel.erase()
 
     # 5. Perforación interna pasante
     bore = CYLINDER(s, R=Rbore, H=A)
     bore.translate((0, 0, -halfA))
     body.subtractFrom(bore)
-    bore.erase()
 
     s.setPoint((0, 0, halfA), (0, 0, 1), 0)
     s.setPoint((0, 0, -halfA), (0, 0, -1), 0)
