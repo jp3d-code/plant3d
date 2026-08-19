@@ -11,7 +11,10 @@ import os
 import sys
 import csv
 import uuid
-import sqlite3
+try:
+    import sqlite3
+except ImportError:
+    sqlite3 = None
 import shutil
 import time
 from pathlib import Path
@@ -248,10 +251,14 @@ def load_families_from_csv(conn, templates_dict):
     print(f"\n[+] Se encontraron {len(csv_files)} archivos CSV de familias en {FAMILIES_DIR.name}/:\n")
 
     for csv_path in csv_files:
-        rel_path = csv_path.relative_to(FAMILIES_DIR)
-        family_folder = rel_path.parts[0]
-        component_stem = csv_path.stem
-        script_name = f"{family_folder}.{component_stem}"
+        py_path = csv_path.with_suffix(".py")
+        if py_path.exists():
+            from build import find_registration_name
+            script_name = find_registration_name(py_path)
+        else:
+            family_folder = rel_path.parts[0]
+            component_stem = csv_path.stem
+            script_name = f"{family_folder}.{component_stem}"
 
         sizes_list = []
         family_meta = {}
