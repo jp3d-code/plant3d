@@ -19,12 +19,12 @@ from math import *
 @param(L=LENGTH, TooltipShort="Dimensión del centro al extremo del tubo")
 @param(A=LENGTH, TooltipShort="Dimensión del centro al extremo roscado")
 def MALE_ELBOW_90(s, OD=0.5, L=1.1, A=1.0, **kw):
-    R1 = L
-    R2 = OD / 2
+    R1 = float(L)
+    R2 = float(OD) / 2.0
     if R1 <= R2:
         R1 = R2 + 0.0001
 
-    elbow = ARC3D2(s, D=R2, D2=R2, R=R1, A=90)
+    elbow = ARC3D2(s, D=float(OD), D2=float(OD), R=R1, A=90)
 
     s.setPoint(elbow.pointAt(0), elbow.directionAt(0), 0)
     s.setPoint(elbow.pointAt(1), elbow.directionAt(1), 0)

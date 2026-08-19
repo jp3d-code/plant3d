@@ -18,13 +18,13 @@ from math import *
 @param(OD=LENGTH, TooltipShort="Diámetro exterior del tubo")
 @param(L=LENGTH, TooltipShort="Dimensión del centro al extremo")
 @param(T=LENGTH, TooltipShort="Espesor de pared")
-def MALE_ELBOW_45(s, OD=1, L=2, T=0.1, **kw):
-    R1 = L
-    R2 = OD / 2
+def MALE_ELBOW_45(s, OD=1.0, L=2.0, T=0.1, **kw):
+    R1 = float(L)
+    R2 = float(OD) / 2.0
     if R1 <= R2:
         R1 = R2 + 0.0001
 
-    elbow = ARC3D2(s, D=R2, D2=R2, R=R1, A=45)
+    elbow = ARC3D2(s, D=float(OD), D2=float(OD), R=R1, A=45)
 
     s.setPoint(elbow.pointAt(0), elbow.directionAt(0), 0)
     s.setPoint(elbow.pointAt(1), elbow.directionAt(1), 0)
