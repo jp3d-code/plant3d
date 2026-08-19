@@ -277,9 +277,9 @@ def load_families_from_csv(conn, templates_dict):
                 family_desc = row["family_desc"]
                 short_desc = row["short_desc"]
 
-                # Extraer parámetros geométricos no vacíos (OD, L, H, T, OD1, etc.)
+                # Extraer parámetros geométricos no vacíos (OD, D, L, A, H, E, T, F, NL, DX, OD1, etc.)
                 params = {}
-                for k in ["OD", "L", "H", "T", "OD1"]:
+                for k in ["OD", "D", "L", "A", "H", "E", "T", "F", "NL", "DX", "OD1", "RO", "RI", "W", "B", "C", "G"]:
                     val = row.get(k, "").strip() if row.get(k) else ""
                     if val:
                         params[k] = float(val)
