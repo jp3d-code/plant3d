@@ -294,7 +294,7 @@ def load_families_from_csv(conn, templates_dict):
 
                 # Extraer parámetros geométricos no vacíos
                 params = {}
-                for k in ["OD", "D", "L", "A", "H", "E", "T", "F", "NL", "DX", "OD1", "RO", "RI", "W", "B", "C", "G"]:
+                for k in ["OD", "D", "L", "A", "H", "E", "T", "F", "NL", "DX", "OD1", "RO", "RI", "W", "B", "C", "G", "L1"]:
                     val = row.get(k, "").strip() if row.get(k) else ""
                     if val:
                         params[k] = float(val)
