@@ -7,9 +7,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import build
+from builders import build
 
-SOURCES = list(ROOT.glob("*.py")) + [
+SOURCES = list(ROOT.glob("*.py")) + list((ROOT / "builders").glob("*.py")) + [
     p for p in build.FAMILIES_DIR.rglob("*.py")
     if p.name not in ("__init__.py",) and build.GENERATED_PREFIX
     not in p.read_text(encoding="utf-8", errors="ignore")
@@ -18,7 +18,7 @@ SOURCES = list(ROOT.glob("*.py")) + [
 
 class TestComponentes(unittest.TestCase):
     def setUp(self):
-        self.components = build.iter_components()
+        self.components = build.iter_components(ROOT)
 
     def test_nombres_registrables_unicos(self):
         names = list(self.components)
@@ -44,17 +44,10 @@ class TestComponentes(unittest.TestCase):
 class TestBuild(unittest.TestCase):
     def test_check_pasa(self):
         result = subprocess.run(
-            [sys.executable, str(ROOT / "build.py"), "--check"],
+            [sys.executable, str(ROOT / "builders" / "build.py"), "--check"],
             capture_output=True, text=True, cwd=ROOT,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-
-    def test_outputs_tienen_marcador(self):
-        for name, src in build.iter_components().items():
-            out = build.output_path(ROOT, src)
-            self.assertTrue(out.exists(), f"Falta output aplanado {out.name}")
-            self.assertIn(build.GENERATED_PREFIX, out.read_text(encoding="utf-8"),
-                          f"{out.name} no fue generado por build.py")
 
     def test_fuentes_sin_marcador(self):
         for p in build.FAMILIES_DIR.rglob("*.py"):

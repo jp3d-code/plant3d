@@ -5,12 +5,14 @@ Escanea dinámicamente todos los archivos .csv en src/families/ para construir e
 sin tener datos de dimensiones hardcodeados en el código Python.
 
 Uso:
-    python build_catalog.py
+    python builders/build_catalog.py
+    python builders/build_catalog.py --output-pcat <path>
 """
 import os
 import sys
 import csv
 import uuid
+import argparse
 try:
     import sqlite3
 except ImportError:
@@ -19,10 +21,20 @@ import shutil
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-FAMILIES_DIR = ROOT / "src" / "families"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+FAMILIES_DIR = REPO_ROOT / "src" / "families"
+DEFAULT_TARGET_DIR = Path(r"C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts")
 TEMPLATE_PCAT = Path(r"C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomParts Imperial Catalog.pcat")
-OUTPUT_PCAT = ROOT / "Swagelok_Catalog.pcat"
+DEFAULT_OUTPUT_PCAT = DEFAULT_TARGET_DIR / "Swagelok_Catalog.pcat"
+
+# Incluir REPO_ROOT en sys.path por si se ejecuta directamente
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+try:
+    from builders.build import find_registration_name
+except ImportError:
+    from build import find_registration_name
 
 # Tablas del sistema SQLite / Plant3D que NO deben vaciarse al limpiar el catálogo
 SYSTEM_TABLES = {
@@ -52,19 +64,20 @@ def get_next_pnp_id(cursor):
     return cursor.lastrowid
 
 
-def prepare_base_catalog():
+def prepare_base_catalog(output_pcat=DEFAULT_OUTPUT_PCAT, template_pcat=TEMPLATE_PCAT):
     """Copia la plantilla base de catálogo .pcat limpia y asigna un GUID único de catálogo."""
-    if OUTPUT_PCAT.exists():
+    output_pcat.parent.mkdir(parents=True, exist_ok=True)
+    if output_pcat.exists():
         try:
-            OUTPUT_PCAT.unlink()
+            output_pcat.unlink()
         except PermissionError:
-            print(f"ERROR: {OUTPUT_PCAT.name} está bloqueado por AutoCAD Plant 3D Spec Editor.")
+            print(f"ERROR: {output_pcat.name} está bloqueado por AutoCAD Plant 3D Spec Editor.")
             print("Por favor, cierra el catálogo en el Spec Editor e inténtalo de nuevo.")
             sys.exit(1)
 
-    shutil.copy2(TEMPLATE_PCAT, OUTPUT_PCAT)
+    shutil.copy2(template_pcat, output_pcat)
 
-    conn = sqlite3.connect(OUTPUT_PCAT)
+    conn = sqlite3.connect(output_pcat)
     cursor = conn.cursor()
 
     # 1. Asignar un RepositoryID GUID 100% ÚNICO para evitar colisión de catálogos en Spec Editor
@@ -85,7 +98,7 @@ def prepare_base_catalog():
     conn.commit()
     conn.close()
 
-    print(f"Catálogo base asignado con nuevo RepositoryID {new_repo_guid} en: {OUTPUT_PCAT.name}")
+    print(f"Catálogo base asignado con nuevo RepositoryID {new_repo_guid} en: {output_pcat}")
 
 
 def clean_all_data_tables(conn):
@@ -223,11 +236,13 @@ def add_catalog_family(conn, template_dict, family_desc, short_desc, script_name
     conn.commit()
 
 
-def remove_redundant_catalogs():
+def remove_redundant_catalogs(target_dir=DEFAULT_TARGET_DIR):
     """Elimina archivos .pcat secundarios para asegurar que sólo exista un único catálogo."""
     redundant_files = [
-        ROOT / "Swagelok_Custom_Catalog.pcat",
-        ROOT / "Swagelok_Cloned_Catalog.pcat"
+        target_dir / "Swagelok_Custom_Catalog.pcat",
+        target_dir / "Swagelok_Cloned_Catalog.pcat",
+        REPO_ROOT / "Swagelok_Custom_Catalog.pcat",
+        REPO_ROOT / "Swagelok_Cloned_Catalog.pcat",
     ]
     for f in redundant_files:
         if f.exists():
@@ -253,9 +268,9 @@ def load_families_from_csv(conn, templates_dict):
     for csv_path in csv_files:
         py_path = csv_path.with_suffix(".py")
         if py_path.exists():
-            from build import find_registration_name
             script_name = find_registration_name(py_path)
         else:
+            rel_path = csv_path.relative_to(FAMILIES_DIR)
             family_folder = rel_path.parts[0]
             component_stem = csv_path.stem
             script_name = f"{family_folder}.{component_stem}"
@@ -277,7 +292,7 @@ def load_families_from_csv(conn, templates_dict):
                 family_desc = row["family_desc"]
                 short_desc = row["short_desc"]
 
-                # Extraer parámetros geométricos no vacíos (OD, D, L, A, H, E, T, F, NL, DX, OD1, etc.)
+                # Extraer parámetros geométricos no vacíos
                 params = {}
                 for k in ["OD", "D", "L", "A", "H", "E", "T", "F", "NL", "DX", "OD1", "RO", "RI", "W", "B", "C", "G"]:
                     val = row.get(k, "").strip() if row.get(k) else ""
@@ -319,11 +334,12 @@ def load_families_from_csv(conn, templates_dict):
         )
 
 
-def build_swagelok_catalog():
+def build_swagelok_catalog(output_pcat=DEFAULT_OUTPUT_PCAT):
     print("=== CONSTRUYENDO CATÁLOGO DESACOPLADO DESDE ARCHIVOS CSV SWAGELOK .PCAT ===\n")
-    prepare_base_catalog()
+    output_pcat = Path(output_pcat)
+    prepare_base_catalog(output_pcat)
 
-    conn = sqlite3.connect(OUTPUT_PCAT)
+    conn = sqlite3.connect(output_pcat)
     cursor = conn.cursor()
 
     # Cargar diccionarios plantilla para cada clase PnP
@@ -353,10 +369,17 @@ def build_swagelok_catalog():
     conn.close()
 
     # Eliminar copias redundantes anteriores
-    remove_redundant_catalogs()
+    remove_redundant_catalogs(output_pcat.parent)
 
-    print(f"\n[OK] Catálogo desacoplado generado con éxito en: {OUTPUT_PCAT.resolve()}")
+    print(f"\n[OK] Catálogo desacoplado generado con éxito en: {output_pcat.resolve()}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Genera el catálogo .pcat para Plant 3D.")
+    parser.add_argument("--output-pcat", type=str, default=str(DEFAULT_OUTPUT_PCAT), help="Ruta de destino para el archivo .pcat")
+    args = parser.parse_args()
+    build_swagelok_catalog(Path(args.output_pcat))
 
 
 if __name__ == "__main__":
-    build_swagelok_catalog()
+    main()

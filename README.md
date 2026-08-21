@@ -28,20 +28,20 @@ C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts\
 
 ## Estructura del Repositorio
 
-> **Importante**: El compilador de Plant 3D (`varmain`) solo registra scripts `.py` colocados directamente en la raíz de `CustomScripts/`. Por este motivo, las fuentes se mantienen organizadas por familia en `src/families/` y un script (`build.py`) las aplana a la raíz (con el formato `{family}.{component}.py`) antes de registrar.
+> **Importante**: El compilador de Plant 3D (`varmain`) solo registra scripts `.py` colocados directamente en `CustomScripts/`. Por este motivo, las fuentes se mantienen organizadas por familia en `src/families/` y los builders en `builders/` los compilan y aplanan directamente a `C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts/`.
 
 ```text
-C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts\
-├── build.py                  # Aplana fuentes de src/families/ -> raíz (+ validación)
-├── build_catalog.py          # Genera Swagelok_Catalog.pcat leyendo CSVs y mapeando @activate
-├── Swagelok_Catalog.pcat     # Catálogo de componentes listo para Plant 3D Spec Editor
+c:\Users\ynoacamino\dev\plant3d\
+├── builders/
+│   ├── build.py              # Aplana fuentes de src/families/ -> C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts\
+│   └── build_catalog.py      # Genera Swagelok_Catalog.pcat en CustomScripts\
 ├── src/                      # Código fuente organizado
 │   ├── families/             # Componentes organizados por familias
 │   │   ├── adapters/         # Adaptadores y conectores de puerto
 │   │   ├── crosses/          # Cruces de unión
 │   │   ├── elbows/           # Codos 90°, 45°, hembra, macho, orientables
 │   │   ├── female/           # Conectores hembra NPT y pasamuros
-│   │   ├── male/             # Conectores macho NPT y pasamuros
+   │   ├── male/             # Conectores macho NPT y pasamuros
 │   │   ├── plugs/            # Tapones de tubo y racor
 │   │   ├── primitives/       # Cilindro, caja, esfera, cilindro hueco
 │   │   ├── special/          # Válvula de retención, conectores rápidos
@@ -60,13 +60,13 @@ C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts\
 ## Flujo de Trabajo para Agregar o Modificar Componentes
 
 1. **Editar o crear la fuente** en `src/families/{familia}/{componente}.py` y su correspondiente `.csv`.
-2. **Aplanar fuentes a la raíz**:
+2. **Aplanar fuentes a CustomScripts de Plant 3D**:
    ```bash
-   python build.py
+   python builders/build.py
    ```
 3. **Regenerar el catálogo SQLite `.pcat`**:
    ```bash
-   python build_catalog.py
+   python builders/build_catalog.py
    ```
 4. **Registrar en AutoCAD Plant 3D**:
    En la línea de comandos de AutoCAD Plant 3D:
@@ -107,11 +107,11 @@ C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts\
 ## 📋 Resumen de Comandos Útiles
 
 ```bash
-# Aplanar scripts
-python build.py
+# Aplanar scripts a CustomScripts
+python builders/build.py
 
-# Regenerar catálogo .pcat
-python build_catalog.py
+# Regenerar catálogo .pcat en CustomScripts
+python builders/build_catalog.py
 
 # Ejecutar tests unitarios
 python -m unittest discover -s tests -v

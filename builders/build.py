@@ -1,32 +1,30 @@
 """
-build.py - Aplana los scripts de componentes a la raiz para Plant 3D.
+build.py - Aplana los scripts de componentes a CustomScripts de Plant 3D.
 
 Plant 3D (varmain) solo registra scripts Python colocados directamente en
 CustomScripts/. Para mantener el repositorio ordenado por familias, cada
-componente se crea en su subcarpeta y este script los copia a la raiz.
+componente se crea en su subcarpeta y este script los copia a la carpeta de
+salida especificada (por defecto CustomScripts de Plant 3D 2027).
 
 Uso:
-    python build.py              # aplanar (borra outputs antiguos y regenera)
-    python build.py --check      # solo validar (para CI), no escribe nada
-    python build.py --dry-run    # mostrar que haria sin escribir
-
-Los archivos generados llevan un marcador y no deben editarse a mano:
-si modificas un componente, edita la version en su subcarpeta y vuelve a
-ejecutar este script.
+    python builders/build.py              # aplanar (borra outputs antiguos y regenera)
+    python builders/build.py --check      # solo validar (para CI), no escribe nada
+    python builders/build.py --dry-run    # mostrar que haria sin escribir
+    python builders/build.py --target-dir <path> # especificar ruta de salida alternativa
 """
 
 import re
 import sys
+import argparse
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_TARGET_DIR = Path(r"C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts")
 
-FAMILIES_DIR = ROOT / "src" / "families"
-LIB_DIR = ROOT / "src" / "lib"
+FAMILIES_DIR = REPO_ROOT / "src" / "families"
+LIB_DIR = REPO_ROOT / "src" / "lib"
 
-SOURCE_DIRS = [d.name for d in FAMILIES_DIR.iterdir() if d.is_dir()] if FAMILIES_DIR.exists() else []
-
-# Archivos de la raiz que nunca se consideran output generado.
+# Archivos que nunca se consideran output generado si estuvieran en la carpeta destino
 PROTECTED = {
     "__init__.py",
     "build.py",
@@ -84,10 +82,10 @@ def find_registration_name(path):
     return match.group(1)
 
 
-def iter_components(root=ROOT):
+def iter_components(repo_root=REPO_ROOT):
     """Devuelve {nombre_registrable: Path} para cada componente fuente."""
     components = {}
-    families_dir = root / "src" / "families"
+    families_dir = repo_root / "src" / "families"
     if not families_dir.is_dir():
         return components
     for path in sorted(families_dir.rglob("*.py")):
@@ -109,18 +107,20 @@ def iter_components(root=ROOT):
     return components
 
 
-def output_path(root, src_path):
-    families_dir = root / "src" / "families"
+def output_path(target_dir, src_path, repo_root=REPO_ROOT):
+    families_dir = repo_root / "src" / "families"
     rel = src_path.relative_to(families_dir)
     family = rel.parts[0]
     stem = src_path.stem
-    return root / f"{family}.{stem}.py"
+    return target_dir / f"{family}.{stem}.py"
 
 
-def list_generated_in_root(root=ROOT):
-    """Devuelve los .py de la raiz que llevan el marcador de generado."""
+def list_generated_in_target(target_dir):
+    """Devuelve los .py de la carpeta destino que llevan el marcador de generado."""
     generated = []
-    for path in sorted(root.glob("*.py")):
+    if not target_dir.exists():
+        return generated
+    for path in sorted(target_dir.glob("*.py")):
         if path.name in PROTECTED or path.name == "__init__.py":
             continue
         if _HEADER_RE.search(path.read_text(encoding="utf-8", errors="ignore")):
@@ -128,15 +128,15 @@ def list_generated_in_root(root=ROOT):
     return generated
 
 
-def expected_content(root, src_path):
-    header = GENERATED_MARKER.format(src=src_path.relative_to(root).as_posix())
+def expected_content(repo_root, src_path):
+    header = GENERATED_MARKER.format(src=src_path.relative_to(repo_root).as_posix())
     body = src_path.read_text(encoding="utf-8").rstrip()
     return f"{header}\n{body}\n"
 
 
-def sync_gitignore(root=ROOT, generated_names=()):
-    """Mantiene el bloque de .gitignore con los outputs generados."""
-    gi_path = root / ".gitignore"
+def sync_gitignore(repo_root=REPO_ROOT, generated_names=()):
+    """Mantiene el bloque de .gitignore si el destino esta dentro del repositorio."""
+    gi_path = repo_root / ".gitignore"
     block = [GITIGNORE_START, *[f"/{name}" for name in sorted(generated_names)],
              GITIGNORE_END]
     text = gi_path.read_text(encoding="utf-8") if gi_path.exists() else ""
@@ -154,9 +154,9 @@ def sync_gitignore(root=ROOT, generated_names=()):
     gi_path.write_text(newline.join(lines) + newline, encoding="utf-8")
 
 
-def get_lib_files(root=ROOT):
+def get_lib_files(repo_root=REPO_ROOT):
     """Devuelve la lista de archivos lib en src/lib que deben ser copiados."""
-    lib_dir = root / "src" / "lib"
+    lib_dir = repo_root / "src" / "lib"
     if not lib_dir.is_dir():
         return []
     return [p for p in lib_dir.glob("*.py") if p.name != "__init__.py"]
@@ -167,32 +167,32 @@ def _collisions(output_names):
     return [name for name in output_names if name in PROTECTED]
 
 
-def collect_errors(root=ROOT):
-    """Devuelve la lista de errores de sincronizacion raiz <-> subcarpetas."""
-    components = iter_components(root)
-    lib_files = get_lib_files(root)
+def collect_errors(repo_root=REPO_ROOT, target_dir=DEFAULT_TARGET_DIR):
+    """Devuelve la lista de errores de sincronizacion subcarpetas -> destino."""
+    components = iter_components(repo_root)
+    lib_files = get_lib_files(repo_root)
     
     expected_outputs = {}
     for name, src in components.items():
-        expected_outputs[output_path(root, src).name] = expected_content(root, src)
+        expected_outputs[output_path(target_dir, src, repo_root).name] = expected_content(repo_root, src)
     
     for lib_src in lib_files:
-        expected_outputs[lib_src.name] = expected_content(root, lib_src)
+        expected_outputs[lib_src.name] = expected_content(repo_root, lib_src)
         
     output_names = set(expected_outputs.keys())
 
     errors = []
     for out_name, content in expected_outputs.items():
-        out = root / out_name
+        out = target_dir / out_name
         if not out.exists():
-            errors.append(f"Falta output aplanado: {out.name} (ejecuta python build.py)")
+            errors.append(f"Falta output aplanado: {out.name} en {target_dir} (ejecuta python builders/build.py)")
         elif out.read_text(encoding="utf-8") != content:
-            errors.append(f"Output desactualizado: {out.name} (ejecuta python build.py)")
+            errors.append(f"Output desactualizado: {out.name} en {target_dir} (ejecuta python builders/build.py)")
 
-    stale = [p for p in list_generated_in_root(root) if p.name not in output_names]
+    stale = [p for p in list_generated_in_target(target_dir) if p.name not in output_names]
     if stale:
         names = ", ".join(p.name for p in stale)
-        errors.append(f"Outputs obsoletos en raiz: {names} (ejecuta python build.py)")
+        errors.append(f"Outputs obsoletos en {target_dir}: {names} (ejecuta python builders/build.py)")
 
     for name in _collisions(output_names):
         errors.append(
@@ -201,17 +201,18 @@ def collect_errors(root=ROOT):
     return errors
 
 
-def flatten(root=ROOT):
-    """Aplana los componentes de las subcarpetas a la raiz."""
-    components = iter_components(root)
-    lib_files = get_lib_files(root)
+def flatten(repo_root=REPO_ROOT, target_dir=DEFAULT_TARGET_DIR):
+    """Aplana los componentes de las subcarpetas a la carpeta destino."""
+    target_dir.mkdir(parents=True, exist_ok=True)
+    components = iter_components(repo_root)
+    lib_files = get_lib_files(repo_root)
 
     expected_outputs = {}
     for name, src in components.items():
-        expected_outputs[output_path(root, src).name] = (src, expected_content(root, src))
+        expected_outputs[output_path(target_dir, src, repo_root).name] = (src, expected_content(repo_root, src))
     
     for lib_src in lib_files:
-        expected_outputs[lib_src.name] = (lib_src, expected_content(root, lib_src))
+        expected_outputs[lib_src.name] = (lib_src, expected_content(repo_root, lib_src))
         
     output_names = list(expected_outputs.keys())
 
@@ -220,61 +221,69 @@ def flatten(root=ROOT):
             f"Un archivo generaria '{name}', un archivo protegido. Renombralo."
         )
 
-    for p in list_generated_in_root(root):
+    for p in list_generated_in_target(target_dir):
         if p.name not in output_names:
             p.unlink()
-            print(f"Eliminado: {p.name}")
+            print(f"Eliminado obsoleto en destino: {p.name}")
 
     for out_name, (src, content) in expected_outputs.items():
-        out = root / out_name
+        out = target_dir / out_name
         out.write_text(content, encoding="utf-8")
-        print(f"Aplanado: {src.relative_to(root)} -> {out.name}")
+        print(f"Aplanado: {src.relative_to(repo_root)} -> {out}")
 
-    sync_gitignore(root, output_names)
+    # Si target_dir coincide con repo_root, actualiza gitignore
+    if target_dir.resolve() == repo_root.resolve():
+        sync_gitignore(repo_root, output_names)
     return components
 
 
 def main():
-    args = sys.argv[1:]
-    check_only = "--check" in args
-    dry_run = "--dry-run" in args
-    if check_only and dry_run:
+    parser = argparse.ArgumentParser(description="Aplana componentes para Plant 3D.")
+    parser.add_argument("--check", action="store_true", help="Solo validar, no escribir archivos")
+    parser.add_argument("--dry-run", action="store_true", help="Mostrar que haria sin escribir")
+    parser.add_argument("--target-dir", type=str, default=str(DEFAULT_TARGET_DIR), help="Ruta de destino para los scripts")
+    
+    args = parser.parse_args()
+    target_dir = Path(args.target_dir)
+
+    if args.check and args.dry_run:
         raise SystemExit("Usa solo uno de --check o --dry-run.")
 
     try:
-        if check_only:
-            errors = collect_errors(ROOT)
+        if args.check:
+            errors = collect_errors(REPO_ROOT, target_dir)
             if errors:
                 raise SystemExit("\n".join("[CHECK FAIL] " + e for e in errors))
-            components = iter_components(ROOT)
-            lib_files = get_lib_files(ROOT)
+            components = iter_components(REPO_ROOT)
+            lib_files = get_lib_files(REPO_ROOT)
             count = len(components) + len(lib_files)
-            print(f"[OK] {count} archivos validados, raiz sincronizada.")
+            print(f"[OK] {count} archivos validados para {target_dir}.")
             return
 
-        components = iter_components(ROOT)
-        lib_files = get_lib_files(ROOT)
-        print("Archivos encontrados:")
+        components = iter_components(REPO_ROOT)
+        lib_files = get_lib_files(REPO_ROOT)
+        print(f"Archivos encontrados (Destino: {target_dir}):")
         for name in sorted(components):
-            print(f"  {name:<20} -> {components[name].relative_to(ROOT)}")
+            print(f"  {name:<20} -> {components[name].relative_to(REPO_ROOT)}")
         for lib_src in lib_files:
-            print(f"  [lib] {lib_src.name:<16} -> {lib_src.relative_to(ROOT)}")
+            print(f"  [lib] {lib_src.name:<16} -> {lib_src.relative_to(REPO_ROOT)}")
 
-        output_names = {output_path(ROOT, src).name for src in components.values()}
+        output_names = {output_path(target_dir, src, REPO_ROOT).name for src in components.values()}
         output_names.update(lib_src.name for lib_src in lib_files)
         
-        stale = [p for p in list_generated_in_root(ROOT) if p.name not in output_names]
+        stale = [p for p in list_generated_in_target(target_dir) if p.name not in output_names]
         if stale:
             print("\nOutputs obsoletos que se eliminaran:")
             for p in stale:
                 print(f"  - {p.name}")
 
-        if dry_run:
+        if args.dry_run:
             print("\n[dry-run] No se escribieron archivos.")
             return
 
-        flatten(ROOT)
-        print("\nListo. Ejecuta PLANTREGISTERCUSTOMSCRIPTS en AutoCAD Plant 3D.")
+        flatten(REPO_ROOT, target_dir)
+        print(f"\nListo. Scripts aplanados en {target_dir}.")
+        print("Ejecuta PLANTREGISTERCUSTOMSCRIPTS en AutoCAD Plant 3D.")
     except BuildError as exc:
         raise SystemExit(f"[ERROR] {exc}")
 
