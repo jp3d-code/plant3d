@@ -87,6 +87,25 @@ def INTEC_K200_BALL_VALVE(s, L=4.2520, D=3.5039, H=3.7402, L1=6.2992, E=1.5551, 
     bore.translate((0, 0, -halfL - 0.05))
     body.subtractFrom(bore)
 
+    # 10. Perforaciones para pernos en ambas bridas (45°, 135°, 225°, 315°)
+    Rbc = Rbore + (Rflange - Rbore) * (2.0 / 3.0)
+    Rbolt = max(0.08, min(0.25, (Rflange - Rbore) * 0.22))
+    
+    for angle in [45, 135, 225, 315]:
+        rad = radians(angle)
+        bx = Rbc * cos(rad)
+        by = Rbc * sin(rad)
+        
+        # Agujero en Brida 1 (Entrada)
+        bhole1 = CYLINDER(s, R=Rbolt, H=flange_th + 0.1)
+        bhole1.translate((bx, by, -halfL - 0.05))
+        body.subtractFrom(bhole1)
+        
+        # Agujero en Brida 2 (Salida)
+        bhole2 = CYLINDER(s, R=Rbolt, H=flange_th + 0.1)
+        bhole2.translate((bx, by, halfL - flange_th - 0.05))
+        body.subtractFrom(bhole2)
+    
     # Puertos de conexión en los extremos de las bridas
     s.setPoint((0, 0, halfL), (0, 0, 1), 0)
     s.setPoint((0, 0, -halfL), (0, 0, -1), 0)
