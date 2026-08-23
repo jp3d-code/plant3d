@@ -3,6 +3,7 @@ Válvula de bola bridada de 2 piezas INTEC K200 KLINGER SCHÖNEBERG.
 ANSI Class 150 / Class 300, 1/2" a 4".
 """
 from varmain.primitiv import *
+from varmain.var_basic import *
 from varmain.custom import *
 from math import *
 
@@ -21,7 +22,7 @@ from math import *
 @param(L1=LENGTH, TooltipShort="Longitud de la palanca de accionamiento")
 @param(E=LENGTH, TooltipShort="Altura desde centro al bonete ISO 5211")
 @param(OD=LENGTH, TooltipShort="Diámetro nominal de paso de tubería")
-def INTEC_K200_BALL_VALVE(s, L=4.25, D=3.50, H=3.74, L1=6.30, E=1.55, OD=0.50, **kw):
+def INTEC_K200_BALL_VALVE(s, L=4.2520, D=3.5039, H=3.7402, L1=6.2992, E=1.5551, OD=0.5000, **kw):
     halfL = float(L) / 2.0
     Rflange = float(D) / 2.0
     Rbore = float(OD) / 2.0
@@ -50,34 +51,42 @@ def INTEC_K200_BALL_VALVE(s, L=4.25, D=3.50, H=3.74, L1=6.30, E=1.55, OD=0.50, *
     flange2.translate((0, 0, halfL - flange_th))
     body.uniteWith(flange2)
     
-    # 5. Cuello del bonete vertical (Eje X)
-    Rstem = max(float(OD) * 0.4, 0.375)
+    # 5. Cuello del bonete vertical (Eje X, altura H)
+    Rstem = max(float(OD) * 0.35, 0.30)
     stem_h = max(0.5, float(H))
     stem = CYLINDER(s, R=Rstem, H=stem_h)
     stem.rotateY(90)
     body.uniteWith(stem)
     
     # 6. Brida superior de montaje ISO 5211 (en altura E)
-    if float(E) > 0:
-        Riso = Rstem * 1.5
-        iso_pad = CYLINDER(s, R=Riso, H=0.25)
+    if float(E) > 0 and float(E) < stem_h:
+        Riso = Rstem * 1.4
+        iso_pad = CYLINDER(s, R=Riso, H=0.18)
         iso_pad.rotateY(90)
-        iso_pad.translate((float(E) - 0.25, 0, 0))
+        iso_pad.translate((float(E), 0, 0))
         body.uniteWith(iso_pad)
     
-    # 7. Palanca de accionamiento (en altura H)
-    handle_len = float(L1)
-    handle_w = max(0.25, float(OD) * 0.25)
-    handle_th = max(0.1875, float(OD) * 0.15)
-    handle = BOX(s, L=handle_th, W=handle_len, H=handle_w)
-    handle.translate((float(H) - handle_th, -handle_len * 0.15, -handle_w / 2.0))
-    body.uniteWith(handle)
+    # 7. Buje central superior de la manija
+    Rhub = Rstem * 1.3
+    hub = CYLINDER(s, R=Rhub, H=0.20)
+    hub.rotateY(90)
+    hub.translate((stem_h, 0, 0))
+    body.uniteWith(hub)
+
+    # 8. Manija / Palanca de accionamiento
+    arm_len = float(L1)
+    arm_w = max(0.30, float(OD) * 0.22)   # Ancho en Z (a lo largo del tubo)
+    arm_th = 0.18                         # Espesor vertical en X
     
-    # 8. Perforación interna pasante
+    lever = BOX(s, L=arm_th, W=arm_len, H=arm_w)
+    lever.translate((stem_h, 0.0, -arm_len/2.0))
+    body.uniteWith(lever)
+
+    # 9. Perforación interna pasante
     bore = CYLINDER(s, R=Rbore, H=float(L) + 0.1)
     bore.translate((0, 0, -halfL - 0.05))
     body.subtractFrom(bore)
-    
+
     # Puertos de conexión en los extremos de las bridas
     s.setPoint((0, 0, halfL), (0, 0, 1), 0)
     s.setPoint((0, 0, -halfL), (0, 0, -1), 0)
