@@ -87,11 +87,21 @@ def INTEC_K200_BALL_VALVE(s, L=4.2520, D=3.5039, H=3.7402, L1=6.2992, E=1.5551, 
     bore.translate((0, 0, -halfL - 0.05))
     body.subtractFrom(bore)
 
-    # 10. Perforaciones para pernos en ambas bridas (45°, 135°, 225°, 315°)
+    # 10. Perforaciones para pernos en ambas bridas (adaptativo por tamaño OD)
     Rbc = Rbore + (Rflange - Rbore) * (2.0 / 3.0)
-    Rbolt = max(0.08, min(0.25, (Rflange - Rbore) * 0.22))
     
-    for angle in [45, 135, 225, 315]:
+    # El tamaño del perno y la cantidad aumentan con el diámetro nominal (OD)
+    if float(OD) <= 1.0:
+        Rbolt = 0.3125 / 2.0  # Orificio ~5/8" para pernos de 1/2"
+        angles = [45, 135, 225, 315]
+    elif float(OD) <= 3.0:
+        Rbolt = 0.375 / 2.0   # Orificio ~3/4" para pernos de 5/8"
+        angles = [45, 135, 225, 315]
+    else:
+        Rbolt = 0.4375 / 2.0  # Orificio ~7/8" para pernos de 3/4"
+        angles = [22.5, 67.5, 112.5, 157.5, 202.5, 247.5, 292.5, 337.5]  # 8 pernos para 4"
+    
+    for angle in angles:
         rad = radians(angle)
         bx = Rbc * cos(rad)
         by = Rbc * sin(rad)

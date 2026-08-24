@@ -275,12 +275,12 @@ def load_families_from_csv(conn, templates_dict):
             component_stem = csv_path.stem
             script_name = f"{family_folder}.{component_stem}"
 
-        sizes_list = []
-        family_meta = {}
+        families_in_csv = {}  # family_desc -> {meta, sizes_list}
 
         with open(csv_path, mode="r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
+                family_desc = row["family_desc"]
                 nd = float(row["nd"])
                 part_num = row["part_num"]
                 od = float(row["OD"])
@@ -289,8 +289,21 @@ def load_families_from_csv(conn, templates_dict):
                 skey = row.get("skey", "UN")
                 pnp_class = row.get("pnp_class", "Coupling")
                 category = row.get("category", "Fittings")
-                family_desc = row["family_desc"]
                 short_desc = row["short_desc"]
+
+                if family_desc not in families_in_csv:
+                    families_in_csv[family_desc] = {
+                        "meta": {
+                            "family_desc": family_desc,
+                            "short_desc": short_desc,
+                            "end_type": end_type,
+                            "skey": skey,
+                            "pnp_class": pnp_class,
+                            "category": category,
+                            "script_name": script_name
+                        },
+                        "sizes_list": []
+                    }
 
                 # Extraer parámetros geométricos no vacíos
                 params = {}
@@ -299,7 +312,7 @@ def load_families_from_csv(conn, templates_dict):
                     if val:
                         params[k] = float(val)
 
-                sizes_list.append({
+                families_in_csv[family_desc]["sizes_list"].append({
                     "nd": nd,
                     "part_num": part_num,
                     "OD": od,
@@ -307,31 +320,24 @@ def load_families_from_csv(conn, templates_dict):
                     "params": params
                 })
 
-                family_meta = {
-                    "family_desc": family_desc,
-                    "short_desc": short_desc,
-                    "end_type": end_type,
-                    "skey": skey,
-                    "pnp_class": pnp_class,
-                    "category": category,
-                    "script_name": script_name
-                }
+        for family_desc, fam_data in families_in_csv.items():
+            family_meta = fam_data["meta"]
+            sizes_list = fam_data["sizes_list"]
+            pnp_class_name = family_meta["pnp_class"]
+            template_dict = templates_dict.get(pnp_class_name, templates_dict["Coupling"])
 
-        pnp_class_name = family_meta["pnp_class"]
-        template_dict = templates_dict.get(pnp_class_name, templates_dict["Coupling"])
-
-        add_catalog_family(
-            conn,
-            template_dict=template_dict,
-            family_desc=family_meta["family_desc"],
-            short_desc=family_meta["short_desc"],
-            script_name=family_meta["script_name"],
-            skey=family_meta["skey"],
-            end_type=family_meta["end_type"],
-            pnp_class=family_meta["pnp_class"],
-            category=family_meta["category"],
-            sizes_list=sizes_list
-        )
+            add_catalog_family(
+                conn,
+                template_dict=template_dict,
+                family_desc=family_meta["family_desc"],
+                short_desc=family_meta["short_desc"],
+                script_name=family_meta["script_name"],
+                skey=family_meta["skey"],
+                end_type=family_meta["end_type"],
+                pnp_class=family_meta["pnp_class"],
+                category=family_meta["category"],
+                sizes_list=sizes_list
+            )
 
 
 def build_swagelok_catalog(output_pcat=DEFAULT_OUTPUT_PCAT):
