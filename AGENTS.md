@@ -18,15 +18,18 @@ El desarrollo del paquete de componentes Swagelok se encuentra **finalizado y 10
 
 ## Flujo de trabajo
 
-1. **Editar SIEMPRE en la subcarpeta de familia** (nunca en la raíz):
-   `src/families/primitives/`, `src/families/tees/`, `src/families/elbows/`, `src/families/straight/`, `src/families/valves/`, etc.
+1. **Editar SIEMPRE dentro de la subcarpeta del catálogo correspondiente**:
+   `src/catalogs/swagelok/families/`, `src/catalogs/klinger_intec/families/`, etc.
 2. **Aplanar componentes directamente a CustomScripts de Plant 3D** (`C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts`):
    ```powershell
    python builders/build.py
    ```
-3. **Regenerar el catálogo `.pcat`**:
+3. **Regenerar los catálogos `.pcat` (múltiples catálogos independientes)**:
    ```powershell
    python builders/build_catalog.py
+   # O compilar un catálogo específico:
+   python builders/build_catalog.py --catalog swagelok
+   python builders/build_catalog.py --catalog klinger_intec
    ```
 4. **Verificar sincronización y tests unitarios**:
    ```powershell

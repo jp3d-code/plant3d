@@ -85,34 +85,57 @@ def find_registration_name(path):
 def iter_components(repo_root=REPO_ROOT):
     """Devuelve {nombre_registrable: Path} para cada componente fuente."""
     components = {}
-    families_dir = repo_root / "src" / "families"
-    if not families_dir.is_dir():
-        return components
-    for path in sorted(families_dir.rglob("*.py")):
-        if path.name in ("__init__.py",) or path.name.startswith("_"):
+    search_dirs = [
+        repo_root / "src" / "catalogs",
+        repo_root / "src" / "families",
+    ]
+    found_any = False
+    for base_dir in search_dirs:
+        if not base_dir.is_dir():
             continue
-        if GENERATED_PREFIX in path.read_text(encoding="utf-8", errors="ignore"):
-            continue
-        name = find_registration_name(path)
-        if name in components:
-            raise BuildError(
-                f"Nombre registrable duplicado: {name}\n"
-                f"  -> {components[name]}\n"
-                f"  -> {path}\n"
-                "Cada componente debe tener un nombre de funcion unico."
-            )
-        components[name] = path
-    if not components:
+        for path in sorted(base_dir.rglob("*.py")):
+            if path.name in ("__init__.py",) or path.name.startswith("_"):
+                continue
+            if GENERATED_PREFIX in path.read_text(encoding="utf-8", errors="ignore"):
+                continue
+            try:
+                name = find_registration_name(path)
+            except ValueError:
+                continue
+            found_any = True
+            if name in components:
+                raise BuildError(
+                    f"Nombre registrable duplicado: {name}\n"
+                    f"  -> {components[name]}\n"
+                    f"  -> {path}\n"
+                    "Cada componente debe tener un nombre de funcion unico."
+                )
+            components[name] = path
+    if not found_any:
         raise BuildError("No se encontraron componentes en las subcarpetas.")
     return components
 
 
 def output_path(target_dir, src_path, repo_root=REPO_ROOT):
+    catalogs_dir = repo_root / "src" / "catalogs"
     families_dir = repo_root / "src" / "families"
-    rel = src_path.relative_to(families_dir)
-    family = rel.parts[0]
-    stem = src_path.stem
-    return target_dir / f"{family}.{stem}.py"
+
+    if catalogs_dir in src_path.parents:
+        rel = src_path.relative_to(catalogs_dir)
+        catalog_name = rel.parts[0]
+        if len(rel.parts) >= 3 and rel.parts[1] == "families":
+            family_name = rel.parts[2]
+        else:
+            family_name = rel.parts[1]
+        stem = src_path.stem
+        return target_dir / f"{catalog_name}.{family_name}.{stem}.py"
+    elif families_dir in src_path.parents:
+        rel = src_path.relative_to(families_dir)
+        family = rel.parts[0]
+        stem = src_path.stem
+        return target_dir / f"{family}.{stem}.py"
+    else:
+        return target_dir / f"{src_path.stem}.py"
 
 
 def list_generated_in_target(target_dir):

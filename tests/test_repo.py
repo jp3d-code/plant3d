@@ -9,8 +9,13 @@ sys.path.insert(0, str(ROOT))
 
 from builders import build
 
+CATALOGS_DIR = ROOT / "src" / "catalogs"
+FAMILIES_DIR = ROOT / "src" / "families"
+
+ALL_SRC_DIRS = [CATALOGS_DIR, FAMILIES_DIR]
+
 SOURCES = list(ROOT.glob("*.py")) + list((ROOT / "builders").glob("*.py")) + [
-    p for p in build.FAMILIES_DIR.rglob("*.py")
+    p for d in ALL_SRC_DIRS if d.is_dir() for p in d.rglob("*.py")
     if p.name not in ("__init__.py",) and build.GENERATED_PREFIX
     not in p.read_text(encoding="utf-8", errors="ignore")
 ]
@@ -50,12 +55,15 @@ class TestBuild(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_fuentes_sin_marcador(self):
-        for p in build.FAMILIES_DIR.rglob("*.py"):
-            if p.name == "__init__.py":
+        for d in ALL_SRC_DIRS:
+            if not d.is_dir():
                 continue
-            self.assertNotIn(build.GENERATED_PREFIX,
-                             p.read_text(encoding="utf-8", errors="ignore"),
-                             f"Fuente {p} tiene marcador de generado")
+            for p in d.rglob("*.py"):
+                if p.name == "__init__.py":
+                    continue
+                self.assertNotIn(build.GENERATED_PREFIX,
+                                 p.read_text(encoding="utf-8", errors="ignore"),
+                                 f"Fuente {p} tiene marcador de generado")
 
 
 if __name__ == "__main__":

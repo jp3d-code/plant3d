@@ -64,16 +64,15 @@ def get_next_pnp_id(cursor):
     return cursor.lastrowid
 
 
-def prepare_base_catalog(output_pcat=DEFAULT_OUTPUT_PCAT, template_pcat=TEMPLATE_PCAT):
+def prepare_base_catalog(output_pcat=DEFAULT_OUTPUT_PCAT, template_pcat=TEMPLATE_PCAT, catalog_title="Custom"):
     """Copia la plantilla base de catálogo .pcat limpia y asigna un GUID único de catálogo."""
     output_pcat.parent.mkdir(parents=True, exist_ok=True)
     if output_pcat.exists():
         try:
             output_pcat.unlink()
         except PermissionError:
-            print(f"ERROR: {output_pcat.name} está bloqueado por AutoCAD Plant 3D Spec Editor.")
-            print("Por favor, cierra el catálogo en el Spec Editor e inténtalo de nuevo.")
-            sys.exit(1)
+            print(f"AVISO: {output_pcat.name} está bloqueado (probablemente abierto en Spec Editor). Omitiendo...")
+            return False
 
     shutil.copy2(template_pcat, output_pcat)
 
@@ -86,9 +85,9 @@ def prepare_base_catalog(output_pcat=DEFAULT_OUTPUT_PCAT, template_pcat=TEMPLATE
 
     cursor.execute("""
         UPDATE RepositoryDescriptor
-        SET RepositoryID = ?, Name = 'Swagelok Catalog', Description = 'Swagelok Custom Component Catalog'
+        SET RepositoryID = ?, Name = ?, Description = ?
         WHERE PnPID = 1;
-    """, (new_repo_guid,))
+    """, (new_repo_guid, f"{catalog_title} Catalog", f"{catalog_title} Custom Component Catalog"))
 
     cursor.execute("""
         UPDATE PnPDatabase
@@ -237,7 +236,7 @@ def add_catalog_family(conn, template_dict, family_desc, short_desc, script_name
 
 
 def remove_redundant_catalogs(target_dir=DEFAULT_TARGET_DIR):
-    """Elimina archivos .pcat secundarios para asegurar que sólo exista un único catálogo."""
+    """Elimina archivos .pcat secundarios para asegurar limpieza."""
     redundant_files = [
         target_dir / "Swagelok_Custom_Catalog.pcat",
         target_dir / "Swagelok_Cloned_Catalog.pcat",
@@ -253,25 +252,25 @@ def remove_redundant_catalogs(target_dir=DEFAULT_TARGET_DIR):
                 print(f"No se pudo eliminar {f.name}: {e}")
 
 
-def load_families_from_csv(conn, templates_dict):
+def load_families_from_csv(conn, templates_dict, source_dir):
     """
-    Escanea dinámicamente la carpeta src/families/ en busca de archivos .csv
+    Escanea dinámicamente la carpeta fuente en busca de archivos .csv
     y procesa cada familia de componentes de forma 100% desacoplada.
     """
-    if not FAMILIES_DIR.exists():
-        print(f"ERROR: No existe la carpeta {FAMILIES_DIR}")
+    if not source_dir.exists():
+        print(f"ERROR: No existe la carpeta {source_dir}")
         return
 
-    csv_files = sorted(FAMILIES_DIR.rglob("*.csv"))
-    print(f"\n[+] Se encontraron {len(csv_files)} archivos CSV de familias en {FAMILIES_DIR.name}/:\n")
+    csv_files = sorted(source_dir.rglob("*.csv"))
+    print(f"\n[+] Se encontraron {len(csv_files)} archivos CSV de familias en {source_dir.name}/:\n")
 
     for csv_path in csv_files:
         py_path = csv_path.with_suffix(".py")
         if py_path.exists():
             script_name = find_registration_name(py_path)
         else:
-            rel_path = csv_path.relative_to(FAMILIES_DIR)
-            family_folder = rel_path.parts[0]
+            rel_path = csv_path.relative_to(source_dir)
+            family_folder = rel_path.parts[0] if len(rel_path.parts) > 1 else csv_path.stem
             component_stem = csv_path.stem
             script_name = f"{family_folder}.{component_stem}"
 
@@ -340,10 +339,16 @@ def load_families_from_csv(conn, templates_dict):
             )
 
 
-def build_swagelok_catalog(output_pcat=DEFAULT_OUTPUT_PCAT):
-    print("=== CONSTRUYENDO CATÁLOGO DESACOPLADO DESDE ARCHIVOS CSV SWAGELOK .PCAT ===\n")
+def build_single_catalog(catalog_dir, output_pcat=None, target_dir=DEFAULT_TARGET_DIR):
+    catalog_key = catalog_dir.name
+    catalog_title = catalog_key.replace("_", " ").title()
+    if output_pcat is None:
+        output_pcat = target_dir / f"{catalog_title.replace(' ', '_')}_Catalog.pcat"
     output_pcat = Path(output_pcat)
-    prepare_base_catalog(output_pcat)
+
+    print(f"\n=== CONSTRUYENDO CATÁLOGO DESACOPLADO: {catalog_title} ({output_pcat.name}) ===\n")
+    if prepare_base_catalog(output_pcat, TEMPLATE_PCAT, catalog_title) is False:
+        return None
 
     conn = sqlite3.connect(output_pcat)
     cursor = conn.cursor()
@@ -369,22 +374,49 @@ def build_swagelok_catalog(output_pcat=DEFAULT_OUTPUT_PCAT):
     # Limpieza exhaustiva de TODAS las tablas de datos para eliminar huérfanos
     clean_all_data_tables(conn)
 
-    # Cargar dinámicamente todas las familias desde src/families/**/*.csv
-    load_families_from_csv(conn, templates_dict)
+    # Cargar dinámicamente todas las familias desde la carpeta fuente
+    load_families_from_csv(conn, templates_dict, catalog_dir)
 
     conn.close()
 
     # Eliminar copias redundantes anteriores
     remove_redundant_catalogs(output_pcat.parent)
 
-    print(f"\n[OK] Catálogo desacoplado generado con éxito en: {output_pcat.resolve()}")
+    print(f"\n[OK] Catálogo {catalog_title} generado con éxito en: {output_pcat.resolve()}")
+    return output_pcat
+
+
+def build_all_catalogs(target_dir=DEFAULT_TARGET_DIR, selected_catalog=None, output_pcat_override=None):
+    catalogs_dir = REPO_ROOT / "src" / "catalogs"
+    built = []
+
+    if selected_catalog:
+        cat_dir = catalogs_dir / selected_catalog
+        if not cat_dir.is_dir():
+            cat_dir = REPO_ROOT / "src" / "families"
+        out_p = Path(output_pcat_override) if output_pcat_override else None
+        built.append(build_single_catalog(cat_dir, out_p, target_dir))
+    else:
+        if catalogs_dir.is_dir():
+            for cat_dir in sorted(catalogs_dir.iterdir()):
+                if cat_dir.is_dir() and any(cat_dir.rglob("*.csv")):
+                    built.append(build_single_catalog(cat_dir, target_dir=target_dir))
+        families_dir = REPO_ROOT / "src" / "families"
+        if families_dir.is_dir() and any(families_dir.rglob("*.csv")):
+            built.append(build_single_catalog(families_dir, output_pcat_override or (target_dir / "Custom_Catalog.pcat"), target_dir))
+
+    return built
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Genera el catálogo .pcat para Plant 3D.")
-    parser.add_argument("--output-pcat", type=str, default=str(DEFAULT_OUTPUT_PCAT), help="Ruta de destino para el archivo .pcat")
+    parser = argparse.ArgumentParser(description="Genera el o los catálogos .pcat para Plant 3D.")
+    parser.add_argument("--catalog", type=str, default=None, help="Nombre del catálogo a compilar (ej: swagelok, klinger_intec)")
+    parser.add_argument("--output-pcat", type=str, default=None, help="Ruta de destino para el archivo .pcat")
+    parser.add_argument("--target-dir", type=str, default=str(DEFAULT_TARGET_DIR), help="Carpeta de salida por defecto")
     args = parser.parse_args()
-    build_swagelok_catalog(Path(args.output_pcat))
+
+    target_dir = Path(args.target_dir)
+    build_all_catalogs(target_dir, args.catalog, args.output_pcat)
 
 
 if __name__ == "__main__":
