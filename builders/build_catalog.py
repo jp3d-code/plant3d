@@ -11,7 +11,9 @@ Uso:
 import os
 import sys
 import csv
+import json
 import uuid
+
 import argparse
 try:
     import sqlite3
@@ -252,6 +254,94 @@ def remove_redundant_catalogs(target_dir=DEFAULT_TARGET_DIR):
                 print(f"No se pudo eliminar {f.name}: {e}")
 
 
+def load_families_from_json_manifest(conn, templates_dict, manifest_path: Path):
+    """
+    Carga familias de componentes directamente desde un archivo manifest.json y modelos JSON
+    generados por catalog-scrap, eliminando totalmente la necesidad de archivos .csv.
+    """
+    if not manifest_path.exists():
+        print(f"ERROR: No existe el archivo manifest.json en {manifest_path}")
+        return
+
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+
+    catalog_dir = manifest_path.parent
+    models = manifest.get("models", [])
+    print(f"\n[+] Cargando {len(models)} modelos desde JSON manifest ({manifest_path.name}):\n")
+
+    for model_meta in models:
+        model_file = model_meta.get("file")
+        if not model_file:
+            continue
+
+        model_json_path = catalog_dir / model_file
+        if not model_json_path.exists():
+            print(f"AVISO: No se encontró el archivo de modelo {model_json_path}")
+            continue
+
+        with open(model_json_path, "r", encoding="utf-8") as mf:
+            model_data = json.load(mf)
+
+        model_name = model_data.get("model", model_meta.get("model"))
+        family_desc = f"{model_data.get('manufacturer', '')} {model_name} {model_data.get('valve_type', '')}".strip()
+        short_desc = f"{model_name} {model_data.get('valve_type', '')}".strip()
+        script_name = model_data.get("geometry_template", "BALL_VALVE_2PC_FLANGED")
+
+        items = model_data.get("items", [])
+        sizes_list = []
+
+        for it in items:
+            dn_mm = it.get("DN_mm", 15)
+            # Convert DN/NPS to inches (nd)
+            nd = round(dn_mm / 25.4, 4) if dn_mm else 0.5
+
+            l_in = round(it.get("L_mm", 0.0) / 25.4, 4)
+            d_in = round(it.get("D_mm", 0.0) / 25.4, 4)
+            h_in = round(it.get("H_mm", 0.0) / 25.4, 4)
+            l1_in = round(it.get("L1_mm", 0.0) / 25.4, 4)
+            e_in = round(it.get("E_mm", 0.0) / 25.4, 4)
+
+            # End type: FL if flanged (D_mm > 0), PL if tubing
+            end_type = "FL" if d_in > 0 else "PL"
+
+            params = {
+                "OD": nd,
+                "L": l_in,
+                "H": h_in
+            }
+            if d_in > 0:
+                params["D"] = d_in
+            if l1_in > 0:
+                params["L1"] = l1_in
+            if e_in > 0:
+                params["E"] = e_in
+
+            sizes_list.append({
+                "nd": nd,
+                "part_num": it.get("Part_Number", f"{model_name}-{nd}"),
+                "OD": nd,
+                "ports_count": 2,
+                "params": params
+            })
+
+        pnp_class_name = "ValveBody"
+        template_dict = templates_dict.get(pnp_class_name, templates_dict["Coupling"])
+
+        add_catalog_family(
+            conn,
+            template_dict=template_dict,
+            family_desc=family_desc,
+            short_desc=short_desc,
+            script_name=script_name,
+            skey="VB",
+            end_type="FL",
+            pnp_class=pnp_class_name,
+            category="Valves",
+            sizes_list=sizes_list
+        )
+
+
 def load_families_from_csv(conn, templates_dict, source_dir):
     """
     Escanea dinámicamente la carpeta fuente en busca de archivos .csv
@@ -339,7 +429,46 @@ def load_families_from_csv(conn, templates_dict, source_dir):
             )
 
 
-def build_single_catalog(catalog_dir, output_pcat=None, target_dir=DEFAULT_TARGET_DIR):
+def build_single_catalog(catalog_dir, output_pcat=None, target_dir=DEFAULT_TARGET_DIR, json_manifest=None):
+    if json_manifest:
+        manifest_path = Path(json_manifest)
+        catalog_title = manifest_path.parent.name.replace("_", " ").title()
+        if output_pcat is None:
+            output_pcat = target_dir / f"{catalog_title.replace(' ', '_')}_Catalog.pcat"
+        output_pcat = Path(output_pcat)
+
+        print(f"\n=== CONSTRUYENDO CATÁLOGO JSON-DRIVEN: {catalog_title} ({output_pcat.name}) ===\n")
+        if prepare_base_catalog(output_pcat, TEMPLATE_PCAT, catalog_title) is False:
+            return None
+
+        conn = sqlite3.connect(output_pcat)
+        cursor = conn.cursor()
+
+        def load_template(pnp_id):
+            cursor.execute("SELECT * FROM EngineeringItems WHERE PnPID = ?;", (pnp_id,))
+            row = cursor.fetchone()
+            cols = [c[0] for c in cursor.description]
+            return dict(zip(cols, row))
+
+        templates_dict = {
+            "Coupling": load_template(2252),
+            "Elbow": load_template(88),
+            "Tee": load_template(1682),
+            "Cross": load_template(573),
+            "Reducer": load_template(3771),
+            "Cap": load_template(807),
+            "Plug": load_template(1413),
+            "ValveBody": load_template(1916)
+        }
+
+        clean_all_data_tables(conn)
+        load_families_from_json_manifest(conn, templates_dict, manifest_path)
+
+        conn.close()
+        remove_redundant_catalogs(output_pcat.parent)
+        print(f"\n[OK] Catálogo JSON-Driven {catalog_title} generado con éxito en: {output_pcat.resolve()}")
+        return output_pcat
+
     catalog_key = catalog_dir.name
     catalog_title = catalog_key.replace("_", " ").title()
     if output_pcat is None:
@@ -374,7 +503,7 @@ def build_single_catalog(catalog_dir, output_pcat=None, target_dir=DEFAULT_TARGE
     # Limpieza exhaustiva de TODAS las tablas de datos para eliminar huérfanos
     clean_all_data_tables(conn)
 
-    # Cargar dinámicamente todas las familias desde la carpeta fuente
+    # Cargar dinámicamente todas las familias desde la carpeta fuente (CSV legacy)
     load_families_from_csv(conn, templates_dict, catalog_dir)
 
     conn.close()
@@ -386,7 +515,11 @@ def build_single_catalog(catalog_dir, output_pcat=None, target_dir=DEFAULT_TARGE
     return output_pcat
 
 
-def build_all_catalogs(target_dir=DEFAULT_TARGET_DIR, selected_catalog=None, output_pcat_override=None):
+def build_all_catalogs(target_dir=DEFAULT_TARGET_DIR, selected_catalog=None, output_pcat_override=None, json_manifest=None):
+    if json_manifest:
+        out_p = Path(output_pcat_override) if output_pcat_override else None
+        return [build_single_catalog(Path("."), out_p, target_dir, json_manifest=json_manifest)]
+
     catalogs_dir = REPO_ROOT / "src" / "catalogs"
     built = []
 
@@ -398,25 +531,46 @@ def build_all_catalogs(target_dir=DEFAULT_TARGET_DIR, selected_catalog=None, out
         built.append(build_single_catalog(cat_dir, out_p, target_dir))
     else:
         if catalogs_dir.is_dir():
-            for cat_dir in sorted(catalogs_dir.iterdir()):
-                if cat_dir.is_dir() and any(cat_dir.rglob("*.csv")):
-                    built.append(build_single_catalog(cat_dir, target_dir=target_dir))
-        families_dir = REPO_ROOT / "src" / "families"
-        if families_dir.is_dir() and any(families_dir.rglob("*.csv")):
-            built.append(build_single_catalog(families_dir, output_pcat_override or (target_dir / "Custom_Catalog.pcat"), target_dir))
+            for sub_dir in sorted(catalogs_dir.iterdir()):
+                if sub_dir.is_dir() and not sub_dir.name.startswith("_"):
+                    built.append(build_single_catalog(sub_dir, None, target_dir))
+        if not built and (REPO_ROOT / "src" / "families").is_dir():
+            built.append(build_single_catalog(REPO_ROOT / "src" / "families", None, target_dir))
 
     return built
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Genera el o los catálogos .pcat para Plant 3D.")
-    parser.add_argument("--catalog", type=str, default=None, help="Nombre del catálogo a compilar (ej: swagelok, klinger_intec)")
-    parser.add_argument("--output-pcat", type=str, default=None, help="Ruta de destino para el archivo .pcat")
-    parser.add_argument("--target-dir", type=str, default=str(DEFAULT_TARGET_DIR), help="Carpeta de salida por defecto")
-    args = parser.parse_args()
+    parser = argparse.ArgumentParser(description="Generador de Catálogos SQLite .pcat para Plant 3D")
+    parser.add_argument(
+        "--output-pcat",
+        type=str,
+        default=None,
+        help="Ruta personalizada de salida para el archivo .pcat generado"
+    )
+    parser.add_argument(
+        "--catalog",
+        type=str,
+        default=None,
+        help="Nombre del catálogo a compilar (ej: swagelok, klinger_intec)"
+    )
+    parser.add_argument(
+        "--json-manifest",
+        type=str,
+        default=None,
+        help="Ruta al archivo manifest.json generado por catalog-scrap para construcción JSON-Driven"
+    )
+    parser.add_argument(
+        "--target-dir",
+        type=str,
+        default=str(DEFAULT_TARGET_DIR),
+        help="Carpeta destino para guardar los catálogos .pcat"
+    )
 
+    args = parser.parse_args()
     target_dir = Path(args.target_dir)
-    build_all_catalogs(target_dir, args.catalog, args.output_pcat)
+
+    build_all_catalogs(target_dir, selected_catalog=args.catalog, output_pcat_override=args.output_pcat, json_manifest=args.json_manifest)
 
 
 if __name__ == "__main__":

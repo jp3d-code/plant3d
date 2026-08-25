@@ -18,19 +18,17 @@ El desarrollo del paquete de componentes Swagelok se encuentra **finalizado y 10
 
 ## Flujo de trabajo
 
-1. **Editar SIEMPRE dentro de la subcarpeta del catálogo correspondiente**:
-   `src/catalogs/swagelok/families/`, `src/catalogs/klinger_intec/families/`, etc.
+1. **Editar geometrías paramétricas 3D dentro de `src/models/`**:
+   `src/models/generic/`, `src/models/swagelok/`, `src/models/klinger_intec/`
 2. **Aplanar componentes directamente a CustomScripts de Plant 3D** (`C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts`):
    ```powershell
    python builders/build.py
    ```
-3. **Regenerar los catálogos `.pcat` (múltiples catálogos independientes)**:
+3. **Generar catálogo `.pcat` (vía JSON manifest desde catalog-scrap)**:
    ```powershell
-   python builders/build_catalog.py
-   # O compilar un catálogo específico:
-   python builders/build_catalog.py --catalog swagelok
-   python builders/build_catalog.py --catalog klinger_intec
+   python builders/build_catalog.py --json-manifest ..\catalog-scrap\output\CATALOGO_VAL_BOLA_2016-44\manifest.json
    ```
+
 4. **Verificar sincronización y tests unitarios**:
    ```powershell
    python builders/build.py --check

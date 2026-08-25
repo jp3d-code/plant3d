@@ -86,9 +86,11 @@ def iter_components(repo_root=REPO_ROOT):
     """Devuelve {nombre_registrable: Path} para cada componente fuente."""
     components = {}
     search_dirs = [
+        repo_root / "src" / "models",
         repo_root / "src" / "catalogs",
         repo_root / "src" / "families",
     ]
+
     found_any = False
     for base_dir in search_dirs:
         if not base_dir.is_dir():
