@@ -169,7 +169,8 @@ def add_catalog_family(conn, template_dict, family_desc, short_desc, script_name
         row_data["NominalDiameter"] = nd
         row_data["NominalUnit"] = "in"
         row_data["MatchingPipeOd"] = item.get("OD", nd)
-        row_data["EndType"] = end_type
+        row_data["EndType"] = item.get("end_type", end_type)
+
         row_data["ContentGeometryParamDefinition"] = param_def
         row_data["ContentIsoSymbolDefinition"] = iso_def
         row_data["ContentGeometryTemplate"] = script_name
@@ -213,7 +214,8 @@ def add_catalog_family(conn, template_dict, family_desc, short_desc, script_name
                     PnPID, SizeRecordId, PortName, NominalDiameter, NominalUnit,
                     MatchingPipeOd, EndType, LengthUnit
                 ) VALUES (?, ?, ?, ?, 'in', ?, ?, 'in');
-            """, (port_pnp_id, port_size_record_guid, port_name, nd, item.get("OD", nd), end_type))
+            """, (port_pnp_id, port_size_record_guid, port_name, nd, item.get("OD", nd), item.get("end_type", end_type)))
+
 
             partport_pnp_id = get_next_pnp_id(cursor)
             partport_guid = guid_to_bytes()
@@ -302,29 +304,28 @@ def load_families_from_json_manifest(conn, templates_dict, manifest_path: Path):
             l1_in = round(it.get("L1_mm", 0.0) / 25.4, 4)
             e_in = round(it.get("E_mm", 0.0) / 25.4, 4)
 
-            # End type: FL if flanged (D_mm > 0), PL if tubing
-            end_type = "FL" if d_in > 0 else "PL"
+            # End type: FL if flanged (D_mm > 0), TAP if threaded
+            end_type = "FL" if d_in > 0 else "TAP"
 
             params = {
                 "OD": nd,
                 "L": l_in,
-                "H": h_in
+                "D": d_in,
+                "H": h_in,
+                "L1": l1_in,
+                "E": e_in
             }
-            if d_in > 0:
-                params["D"] = d_in
-            if l1_in > 0:
-                params["L1"] = l1_in
-            if e_in > 0:
-                params["E"] = e_in
 
             sizes_list.append({
                 "nd": nd,
                 "part_num": it.get("Part_Number", f"{model_name}-{nd}"),
                 "OD": nd,
                 "ports_count": 2,
-                "params": params
+                "params": params,
+                "end_type": end_type
             })
 
+        family_end_type = sizes_list[0]["end_type"] if sizes_list else "FL"
         pnp_class_name = "ValveBody"
         template_dict = templates_dict.get(pnp_class_name, templates_dict["Coupling"])
 
@@ -335,11 +336,12 @@ def load_families_from_json_manifest(conn, templates_dict, manifest_path: Path):
             short_desc=short_desc,
             script_name=script_name,
             skey="VB",
-            end_type="FL",
+            end_type=family_end_type,
             pnp_class=pnp_class_name,
             category="Valves",
             sizes_list=sizes_list
         )
+
 
 
 def load_families_from_csv(conn, templates_dict, source_dir):

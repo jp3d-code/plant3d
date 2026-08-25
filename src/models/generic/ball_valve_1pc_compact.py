@@ -16,14 +16,15 @@ from math import *
 )
 @group("MainDimensions")
 @param(L=LENGTH, TooltipShort="Longitud total cara a cara")
+@param(D=LENGTH, TooltipShort="Diámetro exterior del cuerpo/brida")
 @param(H=LENGTH, TooltipShort="Altura del centro a la palanca")
 @param(L1=LENGTH, TooltipShort="Longitud de la palanca de accionamiento")
 @param(OD=LENGTH, TooltipShort="Diámetro nominal de paso de tubería")
-def BALL_VALVE_1PC_COMPACT(s, L=2.20, H=2.20, L1=4.00, OD=0.50, **kw):
+def BALL_VALVE_1PC_COMPACT(s, L=2.20, D=1.50, H=2.20, L1=4.00, OD=0.50, **kw):
     halfL = float(L) / 2.0
     Rbore = float(OD) / 2.0
+    Rbody = max(float(D) / 2.0, float(OD) * 1.2) if float(D) > 0 else float(OD) * 1.4
 
-    Rbody = max(float(OD) * 1.4, 0.65)
     body = CYLINDER(s, R=Rbody, H=float(L))
     body.translate((0, 0, -halfL))
 
