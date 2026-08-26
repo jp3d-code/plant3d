@@ -53,6 +53,7 @@ def BALL_VALVE_3PC_THREADED(s, L=2.80, D=1.50, H=2.50, L1=4.50, OD=0.50, **kw):
     bore.translate((0, 0, -halfL - 0.05))
     body.subtractFrom(bore)
 
+
     s.setPoint((0, 0, halfL), (0, 0, 1), 0)
     s.setPoint((0, 0, -halfL), (0, 0, -1), 0)
 

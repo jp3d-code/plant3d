@@ -67,6 +67,7 @@ def BALL_VALVE_HANDWHEEL(s, L=4.25, D=3.50, H=5.50, Dw=4.00, OD=0.50, **kw):
     bore.translate((0, 0, -halfL - 0.05))
     body.subtractFrom(bore)
 
+
     s.setPoint((0, 0, halfL), (0, 0, 1), 0)
     s.setPoint((0, 0, -halfL), (0, 0, -1), 0)
 

@@ -46,6 +46,7 @@ def BALL_VALVE_1PC_COMPACT(s, L=2.20, D=1.50, H=2.20, L1=4.00, OD=0.50, **kw):
     bore.translate((0, 0, -halfL - 0.05))
     body.subtractFrom(bore)
 
+
     s.setPoint((0, 0, halfL), (0, 0, 1), 0)
     s.setPoint((0, 0, -halfL), (0, 0, -1), 0)
 

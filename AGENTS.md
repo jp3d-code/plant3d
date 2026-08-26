@@ -52,9 +52,10 @@ El desarrollo del paquete de componentes Swagelok se encuentra **finalizado y 10
   - Usar siempre valores flotantes explícitos (`float(OD)`, `float(L)`).
   - Posicionar puertos con `s.setPoint(elbow.pointAt(0), elbow.directionAt(0), 0)` y `s.setPoint(elbow.pointAt(1), elbow.directionAt(1), 0)`.
 
-### 2. Liberación de Memoria C++ en Operaciones Booleanas
-- En `varmain`, al llamar a `uniteWith(operando)` o `subtractFrom(operando)`, el motor C++ **asume la propiedad del puntero y lo elimina automáticamente**.
-- **Regla de Oro**: Jamás invocar `operando.erase()` después de `uniteWith()` o `subtractFrom()`. Hacerlo causa un doble `free()` que crashea AutoCAD con `FATAL ERROR: unhandled access violation reading 0x0000`.
+### 2. Parámetro `s` en Primitivas y Operaciones CSG
+- **Primitiva Raíz y Operandos**: En `varmain`, **TODAS las primitivas (`CYLINDER`, `BOX`, `SPHERE`, `CONE`, `TORUS`, `ARC3D2`) exigen pasar el objeto `s` como su primer argumento posicional** (ej: `body = SPHERE(s, R=Rbody)`, `stem = CYLINDER(s, R=Rstem, H=stem_h)`). Omitir `s` o pasar `None` generará `TypeError: p3dprimitive() argument 1 must be pyvariant.p3dprimitive`.
+- **Manejo de Memoria C++**: Nunca invocar `.erase()` tras operaciones de unión (`uniteWith`) o resta (`subtractFrom`). El motor C++ libera internamente los operandos consumidos.
+
 
 ### 3. Conexiones e Inserción (`end_type = PL`)
 - Para tubos e instrumentación Swagelok, el tipo de extremo nativo es **`PL`**.

@@ -62,6 +62,7 @@ def BALL_VALVE_2PC_FLANGED(s, L=4.25, D=3.50, H=3.74, L1=6.30, E=1.55, OD=0.50, 
     bore.translate((0, 0, -halfL - 0.05))
     body.subtractFrom(bore)
 
+
     s.setPoint((0, 0, halfL), (0, 0, 1), 0)
     s.setPoint((0, 0, -halfL), (0, 0, -1), 0)
 

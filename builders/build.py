@@ -251,6 +251,17 @@ def flatten(repo_root=REPO_ROOT, target_dir=DEFAULT_TARGET_DIR):
             p.unlink()
             print(f"Eliminado obsoleto en destino: {p.name}")
 
+    # Limpiar archivos .xml huérfanos de scripts eliminados
+    valid_stems = {p.stem.upper() for p in target_dir.glob("*.py")}
+    for xml in target_dir.glob("*.xml"):
+        if xml.name in ("variants.xml", "ScriptGroup.xml"):
+            continue
+        xml_stem = xml.stem.split(".")[-1].upper()
+        if xml_stem not in valid_stems and xml.stem.upper() not in valid_stems:
+            xml.unlink()
+            print(f"Eliminado XML huérfano en destino: {xml.name}")
+
+
     for out_name, (src, content) in expected_outputs.items():
         out = target_dir / out_name
         out.write_text(content, encoding="utf-8")
