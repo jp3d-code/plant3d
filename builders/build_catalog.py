@@ -13,6 +13,7 @@ import sys
 import csv
 import json
 import uuid
+import unicodedata
 
 import argparse
 try:
@@ -44,6 +45,46 @@ SYSTEM_TABLES = {
     "PnPRelationshipProperties", "PnPTableAttributes", "PnPColumnAttributes", 
     "sqlite_sequence", "RepositoryDescriptor", "PnPSys_RelationshipSystem_PnPID"
 }
+
+
+DN_TO_INCH_MAP = {
+    6: 0.125,
+    8: 0.25,
+    10: 0.375,
+    15: 0.5,
+    20: 0.75,
+    25: 1.0,
+    32: 1.25,
+    40: 1.5,
+    50: 2.0,
+    65: 2.5,
+    80: 3.0,
+    100: 4.0,
+    125: 5.0,
+    150: 6.0,
+    200: 8.0,
+    250: 10.0,
+    300: 12.0,
+    350: 14.0,
+    400: 16.0,
+    450: 18.0,
+    500: 20.0,
+    600: 24.0,
+}
+
+
+def convert_dn_to_inch(dn_mm):
+    """Mapea diámetros nominales métricos (DN mm) a pulgadas nominales estándar (NPS in)."""
+    if not dn_mm:
+        return 0.5
+    try:
+        dn_int = int(round(float(dn_mm)))
+        if dn_int in DN_TO_INCH_MAP:
+            return DN_TO_INCH_MAP[dn_int]
+    except (ValueError, TypeError):
+        pass
+    val = float(dn_mm) / 25.4
+    return round(val * 4) / 4.0
 
 
 def guid_to_bytes(guid_str=None):
@@ -162,10 +203,13 @@ def add_catalog_family(conn, template_dict, family_desc, short_desc, script_name
         row_data["PartFamilyLongDesc"] = family_desc
         row_data["PartSizeLongDesc"] = size_desc
         row_data["ShortDescription"] = short_desc
-        row_data["ItemCode"] = part_num or size_desc
-        row_data["Manufacturer"] = "Swagelok"
-        row_data["Material"] = "SS 316"
-        row_data["MaterialCode"] = "316"
+        row_data["Manufacturer"] = item.get("manufacturer", row_data.get("Manufacturer", "Swagelok"))
+        row_data["Material"] = item.get("material", row_data.get("Material", "SS 316"))
+        row_data["MaterialCode"] = item.get("material_code", row_data.get("MaterialCode", "316"))
+        if item.get("weight"):
+            row_data["Weight"] = item["weight"]
+        if item.get("pressure_class"):
+            row_data["PressureClass"] = item["pressure_class"]
         row_data["NominalDiameter"] = nd
         row_data["NominalUnit"] = "in"
         row_data["MatchingPipeOd"] = item.get("OD", nd)
@@ -295,26 +339,24 @@ def load_families_from_json_manifest(conn, templates_dict, manifest_path: Path):
 
         for it in items:
             dn_mm = it.get("DN_mm", 15)
-            # Convert DN/NPS to inches (nd)
-            nd = round(dn_mm / 25.4, 4) if dn_mm else 0.5
+            # Mapear DN métrico (mm) a pulgada nominal estándar (nd)
+            nd = convert_dn_to_inch(dn_mm)
 
             l_in = round(it.get("L_mm", 0.0) / 25.4, 4)
             d_in = round(it.get("D_mm", 0.0) / 25.4, 4)
-            h_in = round(it.get("H_mm", 0.0) / 25.4, 4)
-            l1_in = round(it.get("L1_mm", 0.0) / 25.4, 4)
-            e_in = round(it.get("E_mm", 0.0) / 25.4, 4)
-
-            # End type: FL if flanged (D_mm > 0), TAP if threaded
-            end_type = "FL" if d_in > 0 else "TAP"
+            end_type = "FL" if d_in > 0 else "PL"
 
             params = {
                 "OD": nd,
                 "L": l_in,
-                "D": d_in,
-                "H": h_in,
-                "L1": l1_in,
-                "E": e_in
+                "D": d_in
             }
+            if it.get("H_mm"):
+                params["H"] = round(it["H_mm"] / 25.4, 4)
+            if it.get("L1_mm"):
+                params["L1"] = round(it["L1_mm"] / 25.4, 4)
+            if it.get("E_mm"):
+                params["E"] = round(it["E_mm"] / 25.4, 4)
 
             sizes_list.append({
                 "nd": nd,
@@ -431,45 +473,191 @@ def load_families_from_csv(conn, templates_dict, source_dir):
             )
 
 
-def build_single_catalog(catalog_dir, output_pcat=None, target_dir=DEFAULT_TARGET_DIR, json_manifest=None):
-    if json_manifest:
-        manifest_path = Path(json_manifest)
-        catalog_title = manifest_path.parent.name.replace("_", " ").title()
-        if output_pcat is None:
-            output_pcat = target_dir / f"{catalog_title.replace(' ', '_')}_Catalog.pcat"
-        output_pcat = Path(output_pcat)
+def load_families_from_spec_json(conn, templates_dict, spec_path: Path):
+    """
+    Carga componentes de alta fidelidad desde un archivo JSON de especificación de ficha técnica
+    (ComponentDatasheet generado por catalog-scrap, e.g. INTEC_K200.json).
+    Inyecta el 100% de los parámetros geométricos (OD, L, D, H, L1, E), materiales,
+    normas y clases de presión, mapeando a la plantilla registrable de alta fidelidad.
+    """
+    if not spec_path.exists():
+        print(f"ERROR: No existe el archivo de especificación en {spec_path}")
+        return
 
-        print(f"\n=== CONSTRUYENDO CATÁLOGO JSON-DRIVEN: {catalog_title} ({output_pcat.name}) ===\n")
-        if prepare_base_catalog(output_pcat, TEMPLATE_PCAT, catalog_title) is False:
-            return None
+    with open(spec_path, "r", encoding="utf-8") as f:
+        spec_data = json.load(f)
 
-        conn = sqlite3.connect(output_pcat)
-        cursor = conn.cursor()
+    model_name = spec_data.get("model", spec_path.stem)
+    mfr = spec_data.get("manufacturer", "KLINGER Schöneberg")
+    valve_type = spec_data.get("valve_type", "Flanged Ball Valve Full Bore")
 
-        def load_template(pnp_id):
-            cursor.execute("SELECT * FROM EngineeringItems WHERE PnPID = ?;", (pnp_id,))
-            row = cursor.fetchone()
-            cols = [c[0] for c in cursor.description]
-            return dict(zip(cols, row))
+    items = spec_data.get("plant3d_records") or spec_data.get("plant3d_integration") or spec_data.get("items", [])
+    print(f"\n[+] Cargando especificación de alta fidelidad: {mfr} {model_name} ({len(items)} items):\n")
 
-        templates_dict = {
-            "Coupling": load_template(2252),
-            "Elbow": load_template(88),
-            "Tee": load_template(1682),
-            "Cross": load_template(573),
-            "Reducer": load_template(3771),
-            "Cap": load_template(807),
-            "Plug": load_template(1413),
-            "ValveBody": load_template(1916)
+    families_by_class = {}
+
+    for it in items:
+        dn_mm = it.get("DN_mm", 15)
+        nd = convert_dn_to_inch(dn_mm)
+        pressure_class = it.get("Class_lbs", 150)
+
+        l_in = round(it.get("L_mm", 0.0) / 25.4, 4)
+        d_in = round(it.get("D_mm", 0.0) / 25.4, 4)
+        h_in = round(it.get("H_mm", 0.0) / 25.4, 4)
+        l1_in = round(it.get("L1_mm", 0.0) / 25.4, 4)
+        e_in = round(it.get("E_mm", 0.0) / 25.4, 4)
+
+        part_num = it.get("Part_Number", f"{model_name}-{nd}-{pressure_class}#")
+        end_type = "FL" if d_in > 0 else "PL"
+
+        # Template de geometría registrable de alta fidelidad
+        tmpl = it.get("Geometry_Template", "")
+        if not tmpl or tmpl == "BALL_VALVE_2PC_FLANGED":
+            if "K200" in model_name.upper() or "INTEC" in model_name.upper():
+                tmpl = "INTEC_K200_BALL_VALVE"
+            else:
+                tmpl = "BALL_VALVE_2PC_FLANGED"
+
+        params = {
+            "OD": nd,
+            "L": l_in,
+            "D": d_in,
+            "H": h_in,
+            "L1": l1_in,
+            "E": e_in
         }
 
-        clean_all_data_tables(conn)
-        load_families_from_json_manifest(conn, templates_dict, manifest_path)
+        fam_key = f"{model_name} Class {pressure_class}#"
+        if fam_key not in families_by_class:
+            families_by_class[fam_key] = {
+                "family_desc": f"{mfr} {model_name} Class {pressure_class}# {valve_type}".strip(),
+                "short_desc": f"{model_name} {pressure_class}#".strip(),
+                "script_name": tmpl,
+                "end_type": end_type,
+                "sizes_list": []
+            }
 
-        conn.close()
-        remove_redundant_catalogs(output_pcat.parent)
-        print(f"\n[OK] Catálogo JSON-Driven {catalog_title} generado con éxito en: {output_pcat.resolve()}")
-        return output_pcat
+        weight_kg = it.get("Weight_kg", 0.0)
+        weight_lb = round(weight_kg * 2.20462, 2) if weight_kg else 0.0
+
+        families_by_class[fam_key]["sizes_list"].append({
+            "nd": nd,
+            "part_num": part_num,
+            "OD": nd,
+            "ports_count": 2,
+            "params": params,
+            "end_type": end_type,
+            "weight": weight_lb,
+            "material": it.get("Body_Material", "ASTM A216-WCB / ASTM A351-CF8M"),
+            "manufacturer": mfr,
+            "pressure_class": f"{pressure_class}#"
+        })
+
+    pnp_class_name = "ValveBody"
+    template_dict = templates_dict.get(pnp_class_name, templates_dict["Coupling"])
+
+    for fam_key, fam_info in families_by_class.items():
+        add_catalog_family(
+            conn,
+            template_dict=template_dict,
+            family_desc=fam_info["family_desc"],
+            short_desc=fam_info["short_desc"],
+            script_name=fam_info["script_name"],
+            skey="VB",
+            end_type=fam_info["end_type"],
+            pnp_class=pnp_class_name,
+            category="Valves",
+            sizes_list=fam_info["sizes_list"]
+        )
+
+
+def load_templates_dict(conn):
+    """Carga los diccionarios plantilla de EngineeringItems para cada clase PnP principal."""
+    cursor = conn.cursor()
+
+    def load_template(pnp_id):
+        cursor.execute("SELECT * FROM EngineeringItems WHERE PnPID = ?;", (pnp_id,))
+        row = cursor.fetchone()
+        cols = [c[0] for c in cursor.description]
+        return dict(zip(cols, row))
+
+    return {
+        "Coupling": load_template(2252),
+        "Elbow": load_template(88),
+        "Tee": load_template(1682),
+        "Cross": load_template(573),
+        "Reducer": load_template(3771),
+        "Cap": load_template(807),
+        "Plug": load_template(1413),
+        "ValveBody": load_template(1916),
+    }
+
+
+def build_single_catalog(catalog_dir=None, output_pcat=None, target_dir=DEFAULT_TARGET_DIR, json_manifest=None, spec_json=None):
+    input_file = spec_json or json_manifest
+    if input_file:
+        input_path = Path(input_file)
+        if not input_path.exists():
+            print(f"ERROR: No existe el archivo {input_path}")
+            return None
+
+        with open(input_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        # Detectar si es Specification (ComponentDatasheet) o Catalog Manifest (CommercialCatalog)
+        is_spec = (
+            spec_json is not None
+            or data.get("extraction_type") == "specific"
+            or "plant3d_records" in data
+            or "plant3d_integration" in data
+            or "models" not in data
+        )
+
+        if is_spec:
+            raw_mfr = data.get("manufacturer", "Custom")
+            raw_mdl = data.get("model", input_path.stem)
+            clean_mfr = unicodedata.normalize('NFKD', raw_mfr).encode('ascii', 'ignore').decode('ascii').replace(" ", "_")
+            clean_mdl = unicodedata.normalize('NFKD', raw_mdl).encode('ascii', 'ignore').decode('ascii').replace(" ", "_")
+            catalog_title = f"{clean_mfr}_{clean_mdl}".strip("_")
+            if output_pcat is None:
+                output_pcat = target_dir / f"{catalog_title}_Catalog.pcat"
+            output_pcat = Path(output_pcat)
+
+            print(f"\n=== CONSTRUYENDO CATÁLOGO DESDE ESPECIFICACIÓN DETALLADA: {catalog_title} ({output_pcat.name}) ===\n")
+            if prepare_base_catalog(output_pcat, TEMPLATE_PCAT, catalog_title.replace("_", " ")) is False:
+                return None
+
+            conn = sqlite3.connect(output_pcat)
+            templates_dict = load_templates_dict(conn)
+
+            clean_all_data_tables(conn)
+            load_families_from_spec_json(conn, templates_dict, input_path)
+
+            conn.close()
+            remove_redundant_catalogs(output_pcat.parent)
+            print(f"\n[OK] Catálogo de especificación {catalog_title} generado con éxito en: {output_pcat.resolve()}")
+            return output_pcat
+        else:
+            manifest_path = input_path
+            catalog_title = manifest_path.parent.name.replace("_", " ").title()
+            if output_pcat is None:
+                output_pcat = target_dir / f"{catalog_title.replace(' ', '_')}_Catalog.pcat"
+            output_pcat = Path(output_pcat)
+
+            print(f"\n=== CONSTRUYENDO CATÁLOGO JSON-DRIVEN: {catalog_title} ({output_pcat.name}) ===\n")
+            if prepare_base_catalog(output_pcat, TEMPLATE_PCAT, catalog_title) is False:
+                return None
+
+            conn = sqlite3.connect(output_pcat)
+            templates_dict = load_templates_dict(conn)
+
+            clean_all_data_tables(conn)
+            load_families_from_json_manifest(conn, templates_dict, manifest_path)
+
+            conn.close()
+            remove_redundant_catalogs(output_pcat.parent)
+            print(f"\n[OK] Catálogo JSON-Driven {catalog_title} generado con éxito en: {output_pcat.resolve()}")
+            return output_pcat
 
     catalog_key = catalog_dir.name
     catalog_title = catalog_key.replace("_", " ").title()
@@ -482,25 +670,7 @@ def build_single_catalog(catalog_dir, output_pcat=None, target_dir=DEFAULT_TARGE
         return None
 
     conn = sqlite3.connect(output_pcat)
-    cursor = conn.cursor()
-
-    # Cargar diccionarios plantilla para cada clase PnP
-    def load_template(pnp_id):
-        cursor.execute("SELECT * FROM EngineeringItems WHERE PnPID = ?;", (pnp_id,))
-        row = cursor.fetchone()
-        cols = [c[0] for c in cursor.description]
-        return dict(zip(cols, row))
-
-    templates_dict = {
-        "Coupling": load_template(2252),
-        "Elbow": load_template(88),
-        "Tee": load_template(1682),
-        "Cross": load_template(573),
-        "Reducer": load_template(3771),
-        "Cap": load_template(807),
-        "Plug": load_template(1413),
-        "ValveBody": load_template(1916)
-    }
+    templates_dict = load_templates_dict(conn)
 
     # Limpieza exhaustiva de TODAS las tablas de datos para eliminar huérfanos
     clean_all_data_tables(conn)
@@ -517,10 +687,10 @@ def build_single_catalog(catalog_dir, output_pcat=None, target_dir=DEFAULT_TARGE
     return output_pcat
 
 
-def build_all_catalogs(target_dir=DEFAULT_TARGET_DIR, selected_catalog=None, output_pcat_override=None, json_manifest=None):
-    if json_manifest:
+def build_all_catalogs(target_dir=DEFAULT_TARGET_DIR, selected_catalog=None, output_pcat_override=None, json_manifest=None, spec_json=None):
+    if spec_json or json_manifest:
         out_p = Path(output_pcat_override) if output_pcat_override else None
-        return [build_single_catalog(Path("."), out_p, target_dir, json_manifest=json_manifest)]
+        return [build_single_catalog(Path("."), out_p, target_dir, json_manifest=json_manifest, spec_json=spec_json)]
 
     catalogs_dir = REPO_ROOT / "src" / "catalogs"
     built = []
@@ -543,7 +713,7 @@ def build_all_catalogs(target_dir=DEFAULT_TARGET_DIR, selected_catalog=None, out
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generador de Catálogos SQLite .pcat para Plant 3D")
+    parser = argparse.ArgumentParser(description="Generador Dual-Engine de Catálogos SQLite .pcat para Plant 3D")
     parser.add_argument(
         "--output-pcat",
         type=str,
@@ -557,10 +727,28 @@ def main():
         help="Nombre del catálogo a compilar (ej: swagelok, klinger_intec)"
     )
     parser.add_argument(
+        "--catalog-manifest",
+        type=str,
+        default=None,
+        help="Ruta al manifest.json de un catálogo comercial general (e.g. Saidi RK 2016)"
+    )
+    parser.add_argument(
+        "--spec-json",
+        type=str,
+        default=None,
+        help="Ruta al JSON de especificación de ficha técnica de alta fidelidad (e.g. INTEC_K200.json)"
+    )
+    parser.add_argument(
         "--json-manifest",
         type=str,
         default=None,
-        help="Ruta al archivo manifest.json generado por catalog-scrap para construcción JSON-Driven"
+        help="Alias retrocompatible para --catalog-manifest o --spec-json"
+    )
+    parser.add_argument(
+        "--input",
+        type=str,
+        default=None,
+        help="Entrada unificada inteligente (auto-detecta si es manifest.json de catálogo o JSON de especificación)"
     )
     parser.add_argument(
         "--target-dir",
@@ -572,7 +760,29 @@ def main():
     args = parser.parse_args()
     target_dir = Path(args.target_dir)
 
-    build_all_catalogs(target_dir, selected_catalog=args.catalog, output_pcat_override=args.output_pcat, json_manifest=args.json_manifest)
+    # Resolver parámetros de entrada
+    manifest_arg = args.catalog_manifest or args.json_manifest
+    spec_arg = args.spec_json
+
+    if args.input:
+        in_path = Path(args.input)
+        if in_path.exists():
+            with open(in_path, "r", encoding="utf-8") as f:
+                d = json.load(f)
+            if d.get("extraction_type") == "specific" or "plant3d_integration" in d or "models" not in d:
+                spec_arg = args.input
+            else:
+                manifest_arg = args.input
+        else:
+            manifest_arg = args.input
+
+    build_all_catalogs(
+        target_dir,
+        selected_catalog=args.catalog,
+        output_pcat_override=args.output_pcat,
+        json_manifest=manifest_arg,
+        spec_json=spec_arg
+    )
 
 
 if __name__ == "__main__":
