@@ -364,7 +364,10 @@ def load_families_from_json_manifest(conn, templates_dict, manifest_path: Path):
                 "OD": nd,
                 "ports_count": 2,
                 "params": params,
-                "end_type": end_type
+                "end_type": end_type,
+                "manufacturer": model_data.get("manufacturer", it.get("Manufacturer", "")),
+                "material": it.get("Body_Material", ""),
+                "pressure_class": str(it.get("Class_lbs", ""))
             })
 
         family_end_type = sizes_list[0]["end_type"] if sizes_list else "FL"
