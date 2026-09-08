@@ -11,8 +11,9 @@ from builders import build
 
 CATALOGS_DIR = ROOT / "src" / "catalogs"
 FAMILIES_DIR = ROOT / "src" / "families"
+MODELS_DIR = ROOT / "src" / "models"
 
-ALL_SRC_DIRS = [CATALOGS_DIR, FAMILIES_DIR]
+ALL_SRC_DIRS = [CATALOGS_DIR, FAMILIES_DIR, MODELS_DIR]
 
 SOURCES = list(ROOT.glob("*.py")) + list((ROOT / "builders").glob("*.py")) + [
     p for d in ALL_SRC_DIRS if d.is_dir() for p in d.rglob("*.py")
