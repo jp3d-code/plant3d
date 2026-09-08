@@ -19,14 +19,22 @@ El desarrollo del paquete de componentes Swagelok se encuentra **finalizado y 10
 ## Flujo de trabajo
 
 1. **Editar geometrías paramétricas 3D dentro de `src/models/`**:
-   `src/models/generic/`, `src/models/swagelok/`, `src/models/klinger_intec/`
+   - `src/models/generic/`: Modelos esbeltos gobernados por `L` y `D` para catálogos comerciales generales (e.g. Saidi RK 2016).
+   - `src/models/specific/`: Modelos de precisión y alta fidelidad de ingeniería (e.g. `klinger_intec/intec_k200_ball_valve.py` con taladrado adaptativo de 4/8 pernos, buje, ISO pad y estabilidad C++ `.erase()`).
 2. **Aplanar componentes directamente a CustomScripts de Plant 3D** (`C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts`):
    ```powershell
    python builders/build.py
    ```
-3. **Generar catálogo `.pcat` (vía JSON manifest desde catalog-scrap)**:
+3. **Generar catálogos `.pcat` (Dual-Engine desde catalog-scrap)**:
    ```powershell
-   python builders/build_catalog.py --json-manifest ..\catalog-scrap\output\CATALOGO_VAL_BOLA_2016-44\manifest.json
+   # A. Catálogo Comercial General (modelos gobernados por L y D)
+   python builders/build_catalog.py --catalog-manifest ..\catalog-scrap\output\catalogs\CATALOGO_VAL_BOLA_2016-44\manifest.json
+
+   # B. Ficha Técnica Específica de Alta Fidelidad (100% parámetros de ingeniería y plantilla específica)
+   python builders/build_catalog.py --spec-json ..\catalog-scrap\output\specifications\INTEC_K200.json
+
+   # C. Detección Inteligente Automática
+   python builders/build_catalog.py --input ..\catalog-scrap\output\specifications\INTEC_K200.json
    ```
 
 4. **Verificar sincronización y tests unitarios**:
@@ -52,9 +60,10 @@ El desarrollo del paquete de componentes Swagelok se encuentra **finalizado y 10
   - Usar siempre valores flotantes explícitos (`float(OD)`, `float(L)`).
   - Posicionar puertos con `s.setPoint(elbow.pointAt(0), elbow.directionAt(0), 0)` y `s.setPoint(elbow.pointAt(1), elbow.directionAt(1), 0)`.
 
-### 2. Parámetro `s` en Primitivas y Operaciones CSG
-- **Primitiva Raíz y Operandos**: En `varmain`, **TODAS las primitivas (`CYLINDER`, `BOX`, `SPHERE`, `CONE`, `TORUS`, `ARC3D2`) exigen pasar el objeto `s` como su primer argumento posicional** (ej: `body = SPHERE(s, R=Rbody)`, `stem = CYLINDER(s, R=Rstem, H=stem_h)`). Omitir `s` o pasar `None` generará `TypeError: p3dprimitive() argument 1 must be pyvariant.p3dprimitive`.
-- **Manejo de Memoria C++**: Nunca invocar `.erase()` tras operaciones de unión (`uniteWith`) o resta (`subtractFrom`). El motor C++ libera internamente los operandos consumidos.
+### 2. Primitivas y Manejo de Memoria C++ (`.erase()`)
+- **Registro con `s`**: En `varmain`, todas las primitivas deben crearse pasándoles `s` como primer argumento (ej. `body = SPHERE(s, ...)`, `cyl = CYLINDER(s, ...)`). Esto agrega la primitiva a la lista interna `s.m_Primitives`.
+- **Limpieza con `.erase()` tras CSG**: Después de unir (`body.uniteWith(operando)`) o restar (`body.subtractFrom(operando)`), se debe llamar **SIEMPRE** a `operando.erase()`.
+- **¿Por qué es obligatorio `.erase()`?**: Al unir o restar, la geometría C++ del operando se consume dentro de `body`. Llamar a `operando.erase()` quita la referencia del operando de la lista `s.m_Primitives`. Si no se llama `.erase()`, `s` mantiene un puntero en desuso (*dangling pointer*). Al presionar **ESCAPE** o finalizar el comando de inserción en Plant 3D, el destructor C++ de `s` intenta liberar la lista de primitivas, causando un colapso instantáneo por doble liberación de memoria (`FATAL ERROR: Unhandled Access Violation Reading 0x0000`).
 
 
 ### 3. Conexiones e Inserción (`end_type = PL`)
