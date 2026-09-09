@@ -84,6 +84,8 @@ def convert_dn_to_inch(dn_mm):
     except (ValueError, TypeError):
         pass
     val = float(dn_mm) / 25.4
+    if val > 48.0 or val < 0.1:
+        return None
     return round(val * 4) / 4.0
 
 
@@ -341,9 +343,18 @@ def load_families_from_json_manifest(conn, templates_dict, manifest_path: Path):
             dn_mm = it.get("DN_mm", 15)
             # Mapear DN métrico (mm) a pulgada nominal estándar (nd)
             nd = convert_dn_to_inch(dn_mm)
+            if not nd or nd <= 0 or nd > 48.0:
+                continue
 
             l_in = round(it.get("L_mm", 0.0) / 25.4, 4)
+            if l_in <= 0.0:
+                continue
+
             d_in = round(it.get("D_mm", 0.0) / 25.4, 4)
+            # If D is missing in a flanged valve, estimate default D based on OD
+            if d_in <= 0.0 and "FLANGED" in script_name:
+                d_in = round(nd * 2.2, 4)
+
             end_type = "FL" if d_in > 0 else "PL"
 
             params = {

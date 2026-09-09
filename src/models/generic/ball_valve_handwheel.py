@@ -20,16 +20,18 @@ from math import *
 @param(D=LENGTH, TooltipShort="Diámetro exterior de la brida")
 @param(OD=LENGTH, TooltipShort="Diámetro nominal de paso de tubería")
 def BALL_VALVE_HANDWHEEL(s, L=4.25, D=3.50, OD=0.50, **kw):
-    halfL = float(L) / 2.0
-    Rflange = float(D) / 2.0
+    eff_L = float(L) if float(L) > 0 else max(float(OD) * 2.5, 3.0)
+    eff_D = float(D) if float(D) > 0 else max(float(OD) * 2.2, 3.5)
+    halfL = eff_L / 2.0
+    Rflange = eff_D / 2.0
     Rbore = float(OD) / 2.0
 
-    flange_th = max(0.375, float(D) * 0.11)
-    Rbody = max(float(D) * 0.32, float(OD) * 1.2)
+    flange_th = max(0.375, eff_D * 0.11)
+    Rbody = max(eff_D * 0.32, float(OD) * 1.2)
     body = SPHERE(s, R=Rbody)
 
     Rneck = max(Rbody * 0.85, float(OD) * 0.9)
-    cyl_len = max(0.1, float(L) - (2.0 * flange_th))
+    cyl_len = max(0.1, eff_L - (2.0 * flange_th))
     main_cyl = CYLINDER(s, R=Rneck, H=cyl_len)
     main_cyl.translate((0, 0, -halfL + flange_th))
     body.uniteWith(main_cyl)
@@ -47,14 +49,14 @@ def BALL_VALVE_HANDWHEEL(s, L=4.25, D=3.50, OD=0.50, **kw):
 
     # Altura del vástago y diámetro del volante derivados proporcionalmente de D y OD
     Rstem = max(float(OD) * 0.30, 0.25)
-    stem_h = max(float(D) * 0.85, float(OD) * 2.0, 2.0)
+    stem_h = max(eff_D * 0.85, float(OD) * 2.0, 2.0)
     stem = CYLINDER(s, R=Rstem, H=stem_h)
     stem.rotateY(90)
     body.uniteWith(stem)
     stem.erase()
 
     # Volante giratorio proporcional
-    Rwheel = max(float(D) * 0.5, float(OD) * 1.5, 1.8)
+    Rwheel = max(eff_D * 0.5, float(OD) * 1.5, 1.8)
     wheel_th = max(0.18, float(OD) * 0.12)
     wheel = TORUS(s, R1=Rwheel, R2=wheel_th)
     wheel.rotateY(90)
@@ -69,7 +71,7 @@ def BALL_VALVE_HANDWHEEL(s, L=4.25, D=3.50, OD=0.50, **kw):
     body.uniteWith(hub)
     hub.erase()
 
-    bore = CYLINDER(s, R=Rbore, H=float(L) + 0.1)
+    bore = CYLINDER(s, R=Rbore, H=eff_L + 0.1)
     bore.translate((0, 0, -halfL - 0.05))
     body.subtractFrom(bore)
     bore.erase()
