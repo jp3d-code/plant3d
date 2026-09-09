@@ -195,7 +195,8 @@ def add_catalog_family(conn, template_dict, family_desc, short_desc, script_name
         # B. Formatear la cadena de parámetros geométricos
         params = item.get("params", {})
         param_def = ",".join([f"{k}={v:.6f}" if isinstance(v, float) else f"{k}={v}" for k, v in params.items()])
-        iso_def = f"TYPE={pnp_class.upper()},SKEY={skey}"
+        iso_type = "VALVE" if pnp_class.lower() in ("valvebody", "valve") else pnp_class.upper()
+        iso_def = f"TYPE={iso_type},SKEY={skey}"
 
         # C. Rellenar diccionario de EngineeringItems (Incluye Puerto 1: S1)
         row_data = dict(template_dict)
@@ -227,7 +228,7 @@ def add_catalog_family(conn, template_dict, family_desc, short_desc, script_name
         row_data["LengthUnit"] = "in"
         row_data["PartCategory"] = category
         row_data["ContentDomain"] = "P3D"
-        row_data["PartVersion"] = "5_0"
+        row_data["PartVersion"] = "4_0"
         row_data["WeightUnit"] = "LB"
 
         fields = list(row_data.keys())
@@ -358,16 +359,10 @@ def load_families_from_json_manifest(conn, templates_dict, manifest_path: Path):
             end_type = "FL" if d_in > 0 else "PL"
 
             params = {
-                "OD": nd,
                 "L": l_in,
-                "D": d_in
+                "D": d_in,
+                "OD": nd
             }
-            if it.get("H_mm"):
-                params["H"] = round(it["H_mm"] / 25.4, 4)
-            if it.get("L1_mm"):
-                params["L1"] = round(it["L1_mm"] / 25.4, 4)
-            if it.get("E_mm"):
-                params["E"] = round(it["E_mm"] / 25.4, 4)
 
             sizes_list.append({
                 "nd": nd,
@@ -533,12 +528,12 @@ def load_families_from_spec_json(conn, templates_dict, spec_path: Path):
                 tmpl = "BALL_VALVE_2PC_FLANGED"
 
         params = {
-            "OD": nd,
             "L": l_in,
             "D": d_in,
             "H": h_in,
             "L1": l1_in,
-            "E": e_in
+            "E": e_in,
+            "OD": nd
         }
 
         fam_key = f"{model_name} Class {pressure_class}#"

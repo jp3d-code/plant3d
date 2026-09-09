@@ -114,4 +114,6 @@ PLANTREGISTERCUSTOMSCRIPTS
 - **Nombre de función registrable**: `def NOMBRE(s, ...)` en MAYÚSCULAS, única en todo el repo.
 - **Decoradores obligatorios**: `@activate(..., Ports="N")` y `@param(...)` con tipos `LENGTH` / `ANGLE`.
 - **Puertos**: Definidos explícitamente con `s.setPoint((x,y,z), (dx,dy,dz), index)`.
-- **Estilo de Commits**: Commits atómicos tipo Conventional Commits (`<type>(<scope>): <subject>`) **con cero cuerpo/descripción**.
+- **PROHIBIDO HACER COMMITS SIN AUTORIZACIÓN**: NUNCA ejecutar `git commit` por iniciativa propia ni como paso automático. Solo realizar commits si el usuario da una instrucción o permiso explícito e inmediato ("haz commit", "commitea esto").
+- **Estilo de Commits**: En caso de estar autorizado por el usuario, usar commits atómicos tipo Conventional Commits (`<type>(<scope>): <subject>`) **con cero cuerpo/descripción**.
+
