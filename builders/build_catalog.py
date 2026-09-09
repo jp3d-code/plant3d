@@ -89,6 +89,69 @@ def convert_dn_to_inch(dn_mm):
     return round(val * 4) / 4.0
 
 
+# Mapeo estándar ASME B36.10M: NPS (pulgadas nominales) -> Diámetro exterior real de tubería (MatchingPipeOd en pulgadas)
+NPS_TO_PIPE_OD = {
+    0.125: 0.405,
+    0.25:  0.540,
+    0.375: 0.675,
+    0.5:   0.840,
+    0.75:  1.050,
+    1.0:   1.315,
+    1.25:  1.660,
+    1.5:   1.900,
+    2.0:   2.375,
+    2.5:   2.875,
+    3.0:   3.500,
+    3.5:   4.000,
+    4.0:   4.500,
+    5.0:   5.563,
+    6.0:   6.625,
+    8.0:   8.625,
+    10.0: 10.750,
+    12.0: 12.750,
+    14.0: 14.000,
+    16.0: 16.000,
+    18.0: 18.000,
+    20.0: 20.000,
+    24.0: 24.000,
+}
+
+# Espesores típicos de brida ASME B16.5 Clase 150 (en pulgadas)
+FLANGE_THICKNESS_CLASS_150 = {
+    0.5:  0.375,
+    0.75: 0.438,
+    1.0:  0.500,
+    1.25: 0.563,
+    1.5:  0.625,
+    2.0:  0.688,
+    2.5:  0.813,
+    3.0:  0.875,
+    4.0:  0.875,
+    6.0:  0.938,
+    8.0:  1.063,
+}
+
+
+def get_matching_pipe_od(nd_inch: float) -> float:
+    """Devuelve el MatchingPipeOd estándar ASME B36.10M para una pulgada nominal dada."""
+    if nd_inch in NPS_TO_PIPE_OD:
+        return NPS_TO_PIPE_OD[nd_inch]
+    for k, v in NPS_TO_PIPE_OD.items():
+        if abs(k - nd_inch) < 0.01:
+            return v
+    return round(nd_inch, 3)
+
+
+def normalize_pressure_class(raw_class) -> str:
+    """Normaliza la clase de presión a string numérico estándar Plant 3D (ej: '150LBS' o '150#' -> '150')."""
+    if not raw_class:
+        return "150"
+    s = str(raw_class).strip().upper()
+    s = s.replace("LBS", "").replace("#", "").replace("LB", "").replace("CLASS", "").strip()
+    return s if s else "150"
+
+
+
 def guid_to_bytes(guid_str=None):
     """Genera un GUID binario de 16 bytes compatible con SQLite de Plant 3D."""
     if not guid_str:
@@ -115,11 +178,11 @@ def prepare_base_catalog(output_pcat=DEFAULT_OUTPUT_PCAT, template_pcat=TEMPLATE
     if output_pcat.exists():
         try:
             output_pcat.unlink()
+            shutil.copy2(template_pcat, output_pcat)
         except PermissionError:
-            print(f"AVISO: {output_pcat.name} está bloqueado (probablemente abierto en Spec Editor). Omitiendo...")
-            return False
-
-    shutil.copy2(template_pcat, output_pcat)
+            print(f"INFO: {output_pcat.name} está abierto en Plant 3D; se reutiliza la base existente limpiando sus tablas con SQLite.")
+    else:
+        shutil.copy2(template_pcat, output_pcat)
 
     conn = sqlite3.connect(output_pcat)
     cursor = conn.cursor()
@@ -209,14 +272,40 @@ def add_catalog_family(conn, template_dict, family_desc, short_desc, script_name
         row_data["Manufacturer"] = item.get("manufacturer", row_data.get("Manufacturer", "Swagelok"))
         row_data["Material"] = item.get("material", row_data.get("Material", "SS 316"))
         row_data["MaterialCode"] = item.get("material_code", row_data.get("MaterialCode", "316"))
-        if item.get("weight"):
-            row_data["Weight"] = item["weight"]
-        if item.get("pressure_class"):
-            row_data["PressureClass"] = item["pressure_class"]
+        end_type_val = item.get("end_type", end_type)
+        is_flanged = (end_type_val == "FL")
+
+        # MatchingPipeOd estándar ASME B36.10 para tubería, o OD de tubo para PL
+        if end_type_val == "PL" and item.get("OD"):
+            matching_pipe_od = float(item["OD"])
+        else:
+            matching_pipe_od = get_matching_pipe_od(nd)
+
+        # PressureClass normalizada a formato numérico estándar Plant 3D (ej: 150, 300, 600)
+        norm_class = normalize_pressure_class(item.get("pressure_class", row_data.get("PressureClass", "150")))
+
+        # Facing y FlangeStd: en bridadas asignar RF y ASME B16.5 por defecto
+        facing_val = item.get("facing")
+        if not facing_val and is_flanged:
+            facing_val = "RF"
+
+        flange_std_val = item.get("flange_std")
+        if not flange_std_val and is_flanged:
+            flange_std_val = "ASME B16.5"
+
+        flange_th_val = item.get("flange_thickness")
+        if not flange_th_val and is_flanged:
+            flange_th_val = FLANGE_THICKNESS_CLASS_150.get(nd, round(max(0.375, nd * 0.12 + 0.25), 3))
+
         row_data["NominalDiameter"] = nd
         row_data["NominalUnit"] = "in"
-        row_data["MatchingPipeOd"] = item.get("OD", nd)
-        row_data["EndType"] = item.get("end_type", end_type)
+        row_data["MatchingPipeOd"] = matching_pipe_od
+        row_data["EndType"] = end_type_val
+        row_data["PressureClass"] = norm_class
+        row_data["Facing"] = facing_val
+        row_data["FlangeStd"] = flange_std_val
+        if flange_th_val:
+            row_data["FlangeThickness"] = flange_th_val
 
         row_data["ContentGeometryParamDefinition"] = param_def
         row_data["ContentIsoSymbolDefinition"] = iso_def
@@ -244,7 +333,7 @@ def add_catalog_family(conn, template_dict, family_desc, short_desc, script_name
         except Exception:
             pass
 
-        # D. Registrar Puertos adicionales (S2, S3... SN)
+        # D. Registrar Puertos adicionales (S2, S3... SN) simétricamente con todos los atributos
         for p_idx in range(2, ports_count + 1):
             port_pnp_id = get_next_pnp_id(cursor)
             port_guid = guid_to_bytes()
@@ -259,10 +348,26 @@ def add_catalog_family(conn, template_dict, family_desc, short_desc, script_name
             cursor.execute("""
                 INSERT INTO Port (
                     PnPID, SizeRecordId, PortName, NominalDiameter, NominalUnit,
-                    MatchingPipeOd, EndType, LengthUnit
-                ) VALUES (?, ?, ?, ?, 'in', ?, ?, 'in');
-            """, (port_pnp_id, port_size_record_guid, port_name, nd, item.get("OD", nd), item.get("end_type", end_type)))
-
+                    MatchingPipeOd, EndType, FlangeStd, GasketStd, Facing,
+                    FlangeThickness, PressureClass, Schedule, WallThickness,
+                    EngagementLength, LengthUnit
+                ) VALUES (?, ?, ?, ?, 'in', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'in');
+            """, (
+                port_pnp_id,
+                port_size_record_guid,
+                port_name,
+                nd,
+                matching_pipe_od,
+                end_type_val,
+                flange_std_val,
+                None,
+                facing_val,
+                flange_th_val,
+                norm_class,
+                None,
+                None,
+                None
+            ))
 
             partport_pnp_id = get_next_pnp_id(cursor)
             partport_guid = guid_to_bytes()
@@ -559,7 +664,7 @@ def load_families_from_spec_json(conn, templates_dict, spec_path: Path):
             "weight": weight_lb,
             "material": it.get("Body_Material", "ASTM A216-WCB / ASTM A351-CF8M"),
             "manufacturer": mfr,
-            "pressure_class": f"{pressure_class}#"
+            "pressure_class": str(pressure_class)
         })
 
     pnp_class_name = "ValveBody"
@@ -580,9 +685,10 @@ def load_families_from_spec_json(conn, templates_dict, spec_path: Path):
         )
 
 
-def load_templates_dict(conn):
-    """Carga los diccionarios plantilla de EngineeringItems para cada clase PnP principal."""
-    cursor = conn.cursor()
+def load_templates_dict(conn=None):
+    """Carga los diccionarios plantilla de EngineeringItems para cada clase PnP principal directamente desde TEMPLATE_PCAT."""
+    t_conn = sqlite3.connect(TEMPLATE_PCAT)
+    cursor = t_conn.cursor()
 
     def load_template(pnp_id):
         cursor.execute("SELECT * FROM EngineeringItems WHERE PnPID = ?;", (pnp_id,))
@@ -590,7 +696,7 @@ def load_templates_dict(conn):
         cols = [c[0] for c in cursor.description]
         return dict(zip(cols, row))
 
-    return {
+    res = {
         "Coupling": load_template(2252),
         "Elbow": load_template(88),
         "Tee": load_template(1682),
@@ -600,6 +706,8 @@ def load_templates_dict(conn):
         "Plug": load_template(1413),
         "ValveBody": load_template(1916),
     }
+    t_conn.close()
+    return res
 
 
 def build_single_catalog(catalog_dir=None, output_pcat=None, target_dir=DEFAULT_TARGET_DIR, json_manifest=None, spec_json=None):
