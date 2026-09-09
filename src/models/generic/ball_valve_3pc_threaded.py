@@ -28,10 +28,9 @@ def BALL_VALVE_3PC_THREADED(s, L=2.80, D=1.50, OD=0.50, **kw):
     body = CYLINDER(s, R=Rbody, H=float(L))
     body.translate((0, 0, -halfL))
 
-    # Bloque hexagonal/octogonal central de 3 piezas
+    # Bloque hexagonal/octogonal central de 3 piezas (BOX nace centrado en 0,0,0)
     block_size = Rbody * 2.1
     center_block = BOX(s, L=block_size, W=block_size, H=float(L) * 0.5)
-    center_block.translate((-block_size / 2.0, -block_size / 2.0, -float(L) * 0.25))
     body.uniteWith(center_block)
     center_block.erase()
 
