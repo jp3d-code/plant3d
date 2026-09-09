@@ -1,118 +1,99 @@
-# Plant3D - Custom Scripts para Racores y Componentes Swagelok
+# Plant3D — Componentes Paramétricos y Catálogos `.pcat` para AutoCAD Plant 3D 2027
 
-Repositorio oficial de scripts Python para **AutoCAD Plant 3D 2027** que definen geometrías paramétricas 3D, catálogos `.pcat` y puertos de conexión para componentes y racores personalizados Swagelok.
+Repositorio de modelado 3D paramétrico (`varmain`) y generación de catálogos SQLite (`.pcat`) para **AutoCAD Plant 3D 2027**.
 
----
-
-## 📌 Estado Actual del Proyecto
-
-Actualmente, **el proyecto se encuentra 100% completado, integrado y verificado en AutoCAD Plant 3D 2027**:
-
-- **11 Familias de Componentes Implementadas**: Uniones rectas, codos de 90° y 45°, conectores macho y hembra NPT, tes de unión y derivación, reductores, conectores de manómetros, tapones, tapas y válvulas de bola/retención.
-- **Conexiones Nativas (`PL`)**: Todos los CSV están configurados con `end_type = PL` (Plain End / Tubing), lo que permite acoplamiento 3D automático e intuitivo en Plant 3D sin errores de conexión.
-- **Catálogo SQLite (`Swagelok_Catalog.pcat`)**: Generado automáticamente y listo para importación en el **Spec Editor** o visor de especificaciones (`PLANTSPECVIEWER`).
-- **Primitivas de Codos 3D Corregidas**: Codos de 90° y 45° utilizando la primitiva nativa `ARC3D2` con renderizado 3D perfecto.
-- **Estabilidad C++**: Purga completa de llamadas `.erase()` duplicadas tras operaciones CSG, previniendo cuelgues `FATAL ERROR`.
+Integra una **arquitectura de doble motor (Dual-Engine)** para soportar tanto catálogos comerciales basados en longitudes globales como hojas técnicas de alta fidelidad de ingeniería.
 
 ---
 
-## Ubicación Oficial de Trabajo
+## 📌 Arquitectura Dual-Engine
 
-En **AutoCAD Plant 3D 2027**, la ruta oficial de ejecución para scripts personalizados se define en `ContentConfig.xml` (`<NativeContentCustomScriptsPath>`):
+1. **Modelos Genéricos Comerciales (`src/models/generic/`)**:
+   - Para catálogos estándar (ej. Saidi RK 2016) donde solo se dispone de longitud cara a cara ($L$), diámetro de cuerpo ($D$) y diámetro nominal ($OD$).
+   - Cuello, vástago, palanca y volante se calculan de manera proporcional en Python sin requerir parámetros que las tablas comerciales no proveen.
+   - Componentes disponibles:
+     - `BALL_VALVE_1PC_COMPACT`: Válvula monobloque con palanca.
+     - `BALL_VALVE_2PC_FLANGED`: Válvula de 2 piezas bridada con palanca.
+     - `BALL_VALVE_3PC_THREADED`: Válvula de 3 piezas con cuerpo central simétrico.
+     - `BALL_VALVE_HANDWHEEL`: Válvula bridada con volante para diámetros mayores.
+
+2. **Modelos Específicos de Alta Fidelidad (`src/models/specific/`)**:
+   - Para componentes de precisión con ficha técnica completa de fabricante.
+   - `INTEC_K200_BALL_VALVE` (`src/models/specific/klinger_intec/`):
+     - Gobierna cotas exactas: $L, D, H, L_1, E, OD$.
+     - Plato ISO 5211, buje y prensaestopas.
+     - **Taladrado adaptativo de pernos**: 4 orificios para tamaños $\le 3"$, 8 orificios para $4"$.
+
+---
+
+## 📂 Estructura del Repositorio
 
 ```text
-C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts\
-```
-
----
-
-## Estructura del Repositorio
-
-> **Importante**: El compilador de Plant 3D (`varmain`) solo registra scripts `.py` colocados directamente en `CustomScripts/`. Por este motivo, las fuentes se mantienen organizadas por familia en `src/families/` y los builders en `builders/` los compilan y aplanan directamente a `C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts/`.
-
-```text
-c:\Users\ynoacamino\dev\plant3d\
+plant3d/
 ├── builders/
-│   ├── build.py              # Aplana fuentes de src/families/ -> C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts\
-│   └── build_catalog.py      # Genera Swagelok_Catalog.pcat en CustomScripts\
-├── src/                      # Código fuente organizado
-│   ├── families/             # Componentes organizados por familias
-│   │   ├── adapters/         # Adaptadores y conectores de puerto
-│   │   ├── crosses/          # Cruces de unión
-│   │   ├── elbows/           # Codos 90°, 45°, hembra, macho, orientables
-│   │   ├── female/           # Conectores hembra NPT y pasamuros
-   │   ├── male/             # Conectores macho NPT y pasamuros
-│   │   ├── plugs/            # Tapones de tubo y racor
-│   │   ├── primitives/       # Cilindro, caja, esfera, cilindro hueco
-│   │   ├── special/          # Válvula de retención, conectores rápidos
-│   │   ├── straight/         # Uniones rectas, reductores y pasamuros
-│   │   ├── tees/             # Tes de unión y derivaciones macho/hembra
-│   │   ├── valves/           # Válvulas de bola (2 vías, 3 vías) y aguja
-│   │   └── vent_protectors/  # Protectores de venteo
-│   └── lib/                  # Librería de utilidades compartidas
-│       └── utils.py          # Funciones de validación y conversión
-├── tests/                    # Tests unitarios
-└── __init__.py               # Inicializador del paquete
+│   ├── build.py              # Aplana y despliega scripts a CPak Common\CustomScripts\
+│   └── build_catalog.py      # Generador dual-engine de catálogos SQLite (.pcat)
+├── src/
+│   ├── lib/
+│   │   └── utils.py          # Utilidades matemáticas y de validación
+│   └── models/               # Modelos paramétricos 3D
+│       ├── generic/          # Modelos comerciales L / D
+│       └── specific/         # Modelos de precisión por fabricante
+├── tests/                    # Suite de pruebas unitarias
+├── AGENTS.md                 # Guía y reglas críticas para agentes de IA
+└── README.md
 ```
 
 ---
 
-## Flujo de Trabajo para Agregar o Modificar Componentes
+## 🚀 Flujo de Trabajo
 
-1. **Editar o crear la fuente** en `src/families/{familia}/{componente}.py` y su correspondiente `.csv`.
-2. **Aplanar fuentes a CustomScripts de Plant 3D**:
-   ```bash
-   python builders/build.py
-   ```
-3. **Regenerar el catálogo SQLite `.pcat`**:
-   ```bash
-   python builders/build_catalog.py
-   ```
-4. **Registrar en AutoCAD Plant 3D**:
-   En la línea de comandos de AutoCAD Plant 3D:
-   ```text
-   PLANTREGISTERCUSTOMSCRIPTS
-   ```
-5. **Probar renderizado directo en Plant 3D**:
-   ```lisp
-   (arxload "PnP3dACPAdapter")
-   (testacpscript "SIMPLE_ELBOW_90")
-   (testacpscript "SIMPLE_ELBOW_45")
-   ```
-
----
-
-## 🧠 Aprendizajes Clave y Reglas de la API (`varmain`)
-
-### 1. Primitiva de Codos: `ARC3D2`
-- **`TORUS(s, R1, R2)`**: Genera siempre una dona completa (toroide de 360°) y no permite corte limpio por ángulo `A`.
-- **`ARC3D2(s, D=float(OD), D2=float(OD), R=R1, A=90)`**: Es la primitiva oficial de Autodesk para codos 3D.
-  - Parámetros clave: `D` y `D2` (diámetros exteriores en float), `R` (radio de curvatura centro-extremo), `A` (ángulo en grados: `90` o `45`).
-  - Posicionamiento de puertos: Utilizar `s.setPoint(elbow.pointAt(0), elbow.directionAt(0), 0)` y `s.setPoint(elbow.pointAt(1), elbow.directionAt(1), 0)`.
-
-### 2. Gestión de Memoria C++ en Operaciones CSG (`.erase()`)
-- En el motor C++ de `varmain`, al llamar a `uniteWith(operando)` o `subtractFrom(operando)`, el motor **toma posesión del puntero y lo libera automáticamente**.
-- **Jamás llamar a `operando.erase()` después de `uniteWith` o `subtractFrom`**, ya que provoca una doble liberación de memoria (`FATAL ERROR: unhandled access violation reading 0x0000`).
-
-### 3. Conexiones e Inserción (`end_type = PL`)
-- Para tuberías de instrumentación Swagelok, el `end_type` nativo en Plant 3D es **`PL`** (Plain End / Tubing).
-- El uso de `PL` en los archivos CSV permite que las piezas se auto-conecten y ajusten en dibujos de proyecto 3D sin requerir reglas personalizadas en `DefaultConnectorsConfig.xml`.
-
-### 4. Mapeo de Nombres en `build_catalog.py`
-- En la base de datos `.pcat`, el campo `ContentGeometryTemplate` debe coincidir exactamente con el nombre decorado en `@activate(name)` (ejemplo: `SIMPLE_UNION`, `SIMPLE_ELBOW_90`), en lugar del nombre relativo del archivo.
-- `build_catalog.py` incluye protección `try...except ImportError` en `sqlite3` para evitar conflictos en entornos Python recortados.
-
----
-
-## 📋 Resumen de Comandos Útiles
-
-```bash
-# Aplanar scripts a CustomScripts
+### 1. Desplegar Scripts al Entorno de Plant 3D
+Plant 3D 2027 requiere que los scripts se ubiquen de forma aplanada en `C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts\`.
+```powershell
 python builders/build.py
+```
 
-# Regenerar catálogo .pcat en CustomScripts
-python builders/build_catalog.py
+### 2. Generar Catálogos `.pcat`
+El builder detecta automáticamente el tipo de archivo de entrada generado por `catalog-scrap`:
+```powershell
+# Detección inteligente (especificación de fabricante o catálogo comercial):
+python builders/build_catalog.py --input ..\catalog-scrap\output\specifications\INTEC_K200.json
+python builders/build_catalog.py --input ..\catalog-scrap\output\catalogs\CATALOGO_VAL_BOLA_2016-44\manifest.json
 
-# Ejecutar tests unitarios
+# O usando banderas específicas:
+python builders/build_catalog.py --spec-json ..\catalog-scrap\output\specifications\INTEC_K200.json
+python builders/build_catalog.py --catalog-manifest ..\catalog-scrap\output\catalogs\CATALOGO_VAL_BOLA_2016-44\manifest.json
+```
+
+### 3. Validar con Tests Unitarios
+```powershell
+python builders/build.py --check
 python -m unittest discover -s tests -v
 ```
+
+### 4. Probar en AutoCAD Plant 3D
+En la línea de comandos de AutoCAD Plant 3D:
+```lisp
+(arxload "PnP3dACPAdapter")
+PLANTREGISTERCUSTOMSCRIPTS
+(testacpscript "BALL_VALVE_2PC_FLANGED")
+(testacpscript "BALL_VALVE_3PC_THREADED")
+(testacpscript "BALL_VALVE_1PC_COMPACT")
+(testacpscript "BALL_VALVE_HANDWHEEL")
+(testacpscript "INTEC_K200_BALL_VALVE")
+```
+
+---
+
+## 🧠 Reglas de Oro de la API `varmain`
+
+1. **Estabilidad C++ (`.erase()`)**:
+   Tras unir (`body.uniteWith(op)`) o restar (`body.subtractFrom(op)`), se debe llamar **SIEMPRE** a `op.erase()`. De lo contrario, `s` mantiene punteros colgantes en `s.m_Primitives` que provocan `FATAL ERROR: Unhandled Access Violation` al pulsar ESC.
+2. **Origen de Primitivas**:
+   - `BOX(s, L, W, H)`: Nace ya centrada en `(0, 0, 0)`. **No trasladas por $(-L/2, -W/2)$**.
+   - `CYLINDER(s, R, H)`: Nace con la base en $Z=0$ y crece hacia $+Z$. Se centra con `.translate((0, 0, -H/2))`.
+   - `ARC3D2`: Primitiva oficial para codos y curvas de tubería.
+3. **Conexiones**:
+   - `end_type = PL` (Plain End / Tubing) para instrumentación y auto-snapping sin accesorios.
+   - `end_type = FL` para bridas con clase de presión.

@@ -1,84 +1,117 @@
 # AGENTS.md — Guía para agentes de IA en este repositorio
 
-Repositorio de scripts Python paramétricos y catálogos `.pcat` para **AutoCAD Plant 3D 2027** (módulo `varmain`). Este archivo resume la arquitectura del proyecto, el estado actual y los aprendizajes verificados.
+Repositorio de scripts Python paramétricos y catálogos `.pcat` para **AutoCAD Plant 3D 2027** (módulo `varmain`). Este archivo resume la arquitectura del proyecto, el estado actual, las reglas críticas y los flujos verificados.
 
 ---
 
-## 📌 Estado Actual del Proyecto (Completado)
+## 📌 Estado Actual del Proyecto (Dual-Engine Activo)
 
-El desarrollo del paquete de componentes Swagelok se encuentra **finalizado y 100% operativo**:
+El proyecto cuenta con una arquitectura de **doble motor** integrada con los datos extraídos de `catalog-scrap`:
 
-- **11 Familias Completadas**: Uniones, codos, tes, conectores macho/hembra, pasamuros, reductores, tapones, tapas, válvulas de bola/retención.
-- **Auto-Snapping Activado**: Todos los archivos CSV usan `end_type = PL` (Plain End / Tubing), el estándar nativo de Plant 3D.
-- **Estabilidad C++ Garantizada**: Se purgó la llamada `erase()` posterior a booleanos para prevenir `FATAL ERROR`.
-- **Codos 3D Corregidos**: Se emplea `ARC3D2` con tipos flotantes explícitos.
-- **Catálogo SQLite Actualizado**: `Swagelok_Catalog.pcat` generado con mapeo a funciones `@activate`.
+1. **Modelos Genéricos Comerciales (`src/models/generic/`)**:
+   - Validados visualmente en pantalla en Plant 3D 2027:
+     - `BALL_VALVE_1PC_COMPACT`: Monobloque esbelto con cuello y palanca.
+     - `BALL_VALVE_2PC_FLANGED`: Bipartida bridada con palanca.
+     - `BALL_VALVE_3PC_THREADED`: Tripartita con bloque central simétrico centrado en el origen `(0, 0, 0)`.
+     - `BALL_VALVE_HANDWHEEL`: Válvula bridada con volante toroidal para diámetros grandes.
+   - Gobernados estrictamente por **`L`, `D`, y `OD`**. Todos los elementos visuales (vástago, manija/volante) se calculan proporcionalmente.
 
----
+2. **Modelos Específicos de Alta Fidelidad (`src/models/specific/`)**:
+   - `INTEC_K200_BALL_VALVE` (`klinger_intec/intec_k200_ball_valve.py`):
+     - 100% cotas de ingeniería ($L, D, H, L_1, E, OD$).
+     - Taladrado adaptativo de pernos (4 agujeros para $\le 3"$, 8 agujeros para $4"$).
+     - ISO pad 5211, buje, prensaestopas y puertos de alta precisión.
 
-## Flujo de trabajo
-
-1. **Editar geometrías paramétricas 3D dentro de `src/models/`**:
-   - `src/models/generic/`: Modelos esbeltos gobernados por `L` y `D` para catálogos comerciales generales (e.g. Saidi RK 2016).
-   - `src/models/specific/`: Modelos de precisión y alta fidelidad de ingeniería (e.g. `klinger_intec/intec_k200_ball_valve.py` con taladrado adaptativo de 4/8 pernos, buje, ISO pad y estabilidad C++ `.erase()`).
-2. **Aplanar componentes directamente a CustomScripts de Plant 3D** (`C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts`):
-   ```powershell
-   python builders/build.py
-   ```
-3. **Generar catálogos `.pcat` (Dual-Engine desde catalog-scrap)**:
-   ```powershell
-   # A. Catálogo Comercial General (modelos gobernados por L y D)
-   python builders/build_catalog.py --catalog-manifest ..\catalog-scrap\output\catalogs\CATALOGO_VAL_BOLA_2016-44\manifest.json
-
-   # B. Ficha Técnica Específica de Alta Fidelidad (100% parámetros de ingeniería y plantilla específica)
-   python builders/build_catalog.py --spec-json ..\catalog-scrap\output\specifications\INTEC_K200.json
-
-   # C. Detección Inteligente Automática
-   python builders/build_catalog.py --input ..\catalog-scrap\output\specifications\INTEC_K200.json
-   ```
-
-4. **Verificar sincronización y tests unitarios**:
-   ```powershell
-   python builders/build.py --check
-   python -m unittest discover -s tests -v
-   ```
-5. **En AutoCAD Plant 3D (registrar y probar en pantalla)**:
-   ```text
-   (arxload "PnP3dACPAdapter")
-   PLANTREGISTERCUSTOMSCRIPTS
-   (testacpscript "SIMPLE_ELBOW_90")
-   (testacpscript "SIMPLE_ELBOW_45")
-   ```
+3. **Catálogos SQLite (`.pcat`) Operativos**:
+   - `KLINGER_Schoneberg_INTEC_K200_Catalog.pcat`: 18 ítems (Clases 150# y 300#).
+   - `Catalogo_Val_Bola_2016-44_Catalog.pcat`: 73 ítems comerciales Saidi RK 2016 en 16 familias.
 
 ---
 
-## API `varmain` — Aprendizajes Verificados (Plant 3D 2027)
+## 🔄 Flujo de Trabajo
 
-### 1. Primitiva de Codos 3D: `ARC3D2`
-- **`TORUS(s, R1, R2)`**: Dibuja un toroide completo de 360° (dona) y no corta limpiamente por ángulo `A`.
-- **`ARC3D2(s, D=float(OD), D2=float(OD), R=R1, A=90)`**: Primitiva nativa de curva de tubería.
-  - Usar siempre valores flotantes explícitos (`float(OD)`, `float(L)`).
-  - Posicionar puertos con `s.setPoint(elbow.pointAt(0), elbow.directionAt(0), 0)` y `s.setPoint(elbow.pointAt(1), elbow.directionAt(1), 0)`.
+### 1. Desarrollo de Geometrías 3D (`src/models/`)
+- Modelos genéricos comerciales en `src/models/generic/`.
+- Modelos de precisión por fabricante en `src/models/specific/{fabricante}/`.
 
-### 2. Primitivas y Manejo de Memoria C++ (`.erase()`)
-- **Registro con `s`**: En `varmain`, todas las primitivas deben crearse pasándoles `s` como primer argumento (ej. `body = SPHERE(s, ...)`, `cyl = CYLINDER(s, ...)`). Esto agrega la primitiva a la lista interna `s.m_Primitives`.
-- **Limpieza con `.erase()` tras CSG**: Después de unir (`body.uniteWith(operando)`) o restar (`body.subtractFrom(operando)`), se debe llamar **SIEMPRE** a `operando.erase()`.
-- **¿Por qué es obligatorio `.erase()`?**: Al unir o restar, la geometría C++ del operando se consume dentro de `body`. Llamar a `operando.erase()` quita la referencia del operando de la lista `s.m_Primitives`. Si no se llama `.erase()`, `s` mantiene un puntero en desuso (*dangling pointer*). Al presionar **ESCAPE** o finalizar el comando de inserción en Plant 3D, el destructor C++ de `s` intenta liberar la lista de primitivas, causando un colapso instantáneo por doble liberación de memoria (`FATAL ERROR: Unhandled Access Violation Reading 0x0000`).
+### 2. Aplanar componentes a CustomScripts de Plant 3D
+Despliega automáticamente a `C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts\`:
+```powershell
+python builders/build.py
+```
 
+### 3. Generar Catálogos `.pcat` (Dual-Engine)
+El builder detecta automáticamente si el JSON de entrada es una especificación detallada o un manifiesto comercial:
+```powershell
+# A. Detección automática inteligente
+python builders/build_catalog.py --input ..\catalog-scrap\output\specifications\INTEC_K200.json
+python builders/build_catalog.py --input ..\catalog-scrap\output\catalogs\CATALOGO_VAL_BOLA_2016-44\manifest.json
 
-### 3. Conexiones e Inserción (`end_type = PL`)
-- Para tubos e instrumentación Swagelok, el tipo de extremo nativo es **`PL`**.
-- La declaración de `PL` en los CSVs permite arrastrar y soltar piezas desde la Tool Palette / Spec Viewer y conectarlas a tubos sin errores de compatibilidad de extremos.
+# B. Banderas explícitas
+python builders/build_catalog.py --spec-json ..\catalog-scrap\output\specifications\INTEC_K200.json
+python builders/build_catalog.py --catalog-manifest ..\catalog-scrap\output\catalogs\CATALOGO_VAL_BOLA_2016-44\manifest.json
+```
 
-### 4. Generación de Catálogo `.pcat`
-- El campo `ContentGeometryTemplate` de la base de datos SQLite `.pcat` debe coincidir exactamente con el nombre registrado en `@activate(name)` (ej: `SIMPLE_UNION`, `SIMPLE_ELBOW_90`), resuelto dinámicamente por `build_catalog.py`.
-- Mantener la importación de `sqlite3` protegida con `try...except ImportError` en scripts que puedan ser escaneados por el intérprete embebido de Plant 3D.
+### 4. Ejecutar Pruebas Unitarias
+```powershell
+python builders/build.py --check
+python -m unittest discover -s tests -v
+```
+
+### 5. Registro y Prueba Interactiva en AutoCAD Plant 3D
+En la línea de comandos de Plant 3D:
+```text
+(arxload "PnP3dACPAdapter")
+PLANTREGISTERCUSTOMSCRIPTS
+(testacpscript "BALL_VALVE_2PC_FLANGED")
+(testacpscript "BALL_VALVE_3PC_THREADED")
+(testacpscript "BALL_VALVE_1PC_COMPACT")
+(testacpscript "BALL_VALVE_HANDWHEEL")
+(testacpscript "INTEC_K200_BALL_VALVE")
+```
 
 ---
 
-## Reglas Estructurales
+## 🧠 API `varmain` — Reglas Críticas (Plant 3D 2027)
 
-- Función registrable: `def NOMBRE(s, ...)` en MAYÚSCULAS, única en todo el repo.
-- Todo componente necesita `@activate(..., Ports="N")` y `@param(...)` con tipos `LENGTH` / `ANGLE`.
-- Todo componente define puertos con `s.setPoint(...)`.
-- Los builders se encuentran en la carpeta `builders/` y compilan directamente a `C:\AutoCAD Plant 3D 2027 Content\CPak Common\CustomScripts`.
+### 1. Limpieza con `.erase()` tras CSG (Prevención de Fatal Error)
+- **OBLIGATORIO**: Tras unir (`body.uniteWith(operando)`) o restar (`body.subtractFrom(operando)`), se debe llamar **SIEMPRE** a `operando.erase()`.
+- **Por qué**: Al unir o restar, la geometría C++ del operando se consume dentro de `body`. `.erase()` desvincula el operando de `s.m_Primitives`. Si no se llama `.erase()`, `s` retiene un puntero en desuso (*dangling pointer*). Al presionar **ESCAPE** o borrar la pieza en Plant 3D, el destructor C++ intenta liberar la memoria dos veces, provocando un colapso instantáneo: `FATAL ERROR: Unhandled Access Violation Reading 0x0000`.
+
+### 2. Comportamiento y Origen de Primitivas
+- **`BOX(s, L=..., W=..., H=...)`**:
+  - **Nace ya centrada en el origen `(0, 0, 0)`** en los 3 ejes ($X \in [-L/2, L/2]$, $Y \in [-W/2, W/2]$, $Z \in [-H/2, H/2]$).
+  - **NUNCA** trasladar con `(-L/2, -W/2)` a menos que se desee desplazar intencionalmente; hacerlo expulsará el bloque a un solo cuadrante.
+- **`CYLINDER(s, R=..., H=...)`**:
+  - La base circular nace centrada en $(0, 0)$ en el plano XY y la altura crece hacia $+Z$ ($Z \in [0, H]$).
+  - Para centrarlo sobre el origen del eje de tubería: `body.translate((0, 0, -H/2))`.
+- **`ARC3D2(s, D=float(OD), D2=float(OD), R=R1, A=90)`**:
+  - Primitiva nativa oficial para codos y curvas de tubería. Usar siempre flotantes explícitos (`float(OD)`, `float(L)`).
+  - Posicionar puertos con:
+    ```python
+    s.setPoint(elbow.pointAt(0), elbow.directionAt(0), 0)
+    s.setPoint(elbow.pointAt(1), elbow.directionAt(1), 0)
+    ```
+
+### 3. Modelos Genéricos: Trampa de Parámetros Incompletos
+- En catálogos comerciales (Saidi RK 2016, etc.), las tablas no proporcionan altura de vástago ($H$) ni longitud de palanca ($L_1$).
+- Si un script genérico declara `@param(H=...)`, el generador `.pcat` le asignará `0.0`, provocando que en Plant 3D la válvula se dibuje sin cuello ni manija.
+- **Regla**: Los modelos genéricos solo deben exponer `@param(L=...)`, `@param(D=...)` y `@param(OD=...)`. El resto se deriva en Python.
+
+### 4. Conexiones e Inserción (`end_type`)
+- Tubing / Racores / Roscado / SW: `end_type = PL` (Plain End / Tubing). Activa el auto-snapping nativo.
+- Bridas: `end_type = FL` asociado a su `PressureClass` correspondiente (150#, 300#, PN16, PN40).
+
+### 5. Generación de Catálogo `.pcat`
+- El campo `ContentGeometryTemplate` de la base de datos SQLite `.pcat` debe coincidir exactamente con el nombre de la función en `@activate(name)` (ej: `BALL_VALVE_2PC_FLANGED`, `INTEC_K200_BALL_VALVE`).
+- **Sanitización ASCII**: Nombres de catálogo y tablas deben normalizarse a ASCII puro (evitar caracteres con acentos o diacríticos como `Schöneberg` -> `Schoneberg`) para evitar corrupción al vincular bases de datos en Windows SQLite.
+- Proteger la importación de `sqlite3` con `try...except ImportError` en scripts que puedan ser inspeccionados por el intérprete embebido de Plant 3D.
+
+---
+
+## 📐 Convenciones Estructurales y Git
+
+- **Nombre de función registrable**: `def NOMBRE(s, ...)` en MAYÚSCULAS, única en todo el repo.
+- **Decoradores obligatorios**: `@activate(..., Ports="N")` y `@param(...)` con tipos `LENGTH` / `ANGLE`.
+- **Puertos**: Definidos explícitamente con `s.setPoint((x,y,z), (dx,dy,dz), index)`.
+- **Estilo de Commits**: Commits atómicos tipo Conventional Commits (`<type>(<scope>): <subject>`) **con cero cuerpo/descripción**.
