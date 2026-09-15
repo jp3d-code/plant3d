@@ -24,7 +24,7 @@ El proyecto cuenta con una arquitectura de **doble motor** integrada con los dat
 
 3. **Catálogos SQLite (`.pcat`) Operativos**:
    - `KLINGER_Schoneberg_INTEC_K200_Catalog.pcat`: 18 ítems (Clases 150# y 300#).
-   - `Catalogo_Val_Bola_2016-44_Catalog.pcat`: 73 ítems comerciales Saidi RK 2016 en 16 familias.
+   - `Catalogo_Val_Bola_2016-44_Catalog.pcat`: 80 ítems comerciales Saidi RK 2016 en 16 familias (schema v2: `D_flange_mm`/`D_bore_mm` + procedencia PDF/página/fila por record).
 
 ---
 
@@ -97,15 +97,21 @@ PLANTREGISTERCUSTOMSCRIPTS
 - En catálogos comerciales (Saidi RK 2016, etc.), las tablas no proporcionan altura de vástago ($H$) ni longitud de palanca ($L_1$).
 - Si un script genérico declara `@param(H=...)`, el generador `.pcat` le asignará `0.0`, provocando que en Plant 3D la válvula se dibuje sin cuello ni manija.
 - **Regla**: Los modelos genéricos solo deben exponer `@param(L=...)`, `@param(D=...)` y `@param(OD=...)`. El resto se deriva en Python.
+- **Regla**: `D` es siempre OD de brida. `catalog-scrap` lo entrega separado como `D_flange_mm` (columna D1 del PDF); `D_bore_mm` (columna D/paso) es solo informativo. `build_catalog.py` falla rápido (`KeyError`) ante JSONs del schema v1 (`D_mm`).
 
 ### 4. Conexiones e Inserción (`end_type`)
-- Tubing / Racores / Roscado / SW: `end_type = PL` (Plain End / Tubing). Activa el auto-snapping nativo.
+- Tubing / Roscado hembra NPT-BSP: `end_type = THDF` (como el catálogo oficial ASME; `PL` queda obsoleto para roscadas).
 - Bridas: `end_type = FL` asociado a su `PressureClass` correspondiente (150#, 300#, PN16, PN40).
+- `MatchingPipeOd` SIEMPRE según ASME B36.10 (nunca el nominal), en FL y roscadas.
 
 ### 5. Generación de Catálogo `.pcat`
 - El campo `ContentGeometryTemplate` de la base de datos SQLite `.pcat` debe coincidir exactamente con el nombre de la función en `@activate(name)` (ej: `BALL_VALVE_2PC_FLANGED`, `INTEC_K200_BALL_VALVE`).
 - **Sanitización ASCII**: Nombres de catálogo y tablas deben normalizarse a ASCII puro (evitar caracteres con acentos o diacríticos como `Schöneberg` -> `Schoneberg`) para evitar corrupción al vincular bases de datos en Windows SQLite.
 - Proteger la importación de `sqlite3` con `try...except ImportError` en scripts que puedan ser inspeccionados por el intérprete embebido de Plant 3D.
+- **Unidades imperiales etiquetadas**: `NominalUnit`/`LengthUnit=in`, `WeightUnit=LB` en fila y puertos. Referencia: `ASME Valves Catalog.pcat` (CPak ASME 2027).
+- **Espesor de brida por clase** (`FLANGE_THICKNESS`, valores exactos del oficial B16.5 150/300/600). `FlangeStd` vacío por defecto como el oficial.
+- **Sin herencia del template**: `DesignStd=""`, `CompatibleStandard` explícito (`ASME B16.10` en bridadas), `ItemCode=""`, `Schedule/WallThickness/EngagementLength=None`, `Weight` en lb siempre escrito.
+- **Clases**: numéricas LBS/WOG (`800LBS`->`800`, `1000WOG`->`1000`); PN se conserva tal cual (`PN16`) porque no tiene equivalente imperial.
 
 ---
 

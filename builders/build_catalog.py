@@ -116,20 +116,38 @@ NPS_TO_PIPE_OD = {
     24.0: 24.000,
 }
 
-# Espesores típicos de brida ASME B16.5 Clase 150 (en pulgadas)
-FLANGE_THICKNESS_CLASS_150 = {
-    0.5:  0.375,
-    0.75: 0.438,
-    1.0:  0.500,
-    1.25: 0.563,
-    1.5:  0.625,
-    2.0:  0.688,
-    2.5:  0.813,
-    3.0:  0.875,
-    4.0:  0.875,
-    6.0:  0.938,
-    8.0:  1.063,
+# Espesores de brida ASME B16.5 (tf, en pulgadas, con resalte incluido).
+# Valores EXACTOS extraidos del catalogo oficial
+# 'ASME Valves Catalog.pcat' (familias Ball Valve RF 150/300/600).
+FLANGE_THICKNESS = {
+    "150": {
+        0.5: 0.44, 0.75: 0.50, 1.0: 0.56, 1.25: 0.62, 1.5: 0.68,
+        2.0: 0.75, 2.5: 0.87, 3.0: 0.94, 4.0: 0.94, 6.0: 1.00,
+        8.0: 1.12, 10.0: 1.18, 12.0: 1.25, 14.0: 1.37, 16.0: 1.44,
+    },
+    "300": {
+        0.5: 0.56, 0.75: 0.62, 1.0: 0.68, 1.25: 0.75, 1.5: 0.81,
+        2.0: 0.87, 2.5: 1.00, 3.0: 1.12, 4.0: 1.25, 6.0: 1.44,
+        8.0: 1.62, 10.0: 1.87, 12.0: 2.00, 14.0: 2.12, 16.0: 2.25,
+    },
+    "600": {
+        0.5: 0.81, 0.75: 0.87, 1.0: 0.94, 1.25: 1.06, 1.5: 1.13,
+        2.0: 1.25, 2.5: 1.37, 3.0: 1.50, 4.0: 1.75, 6.0: 2.13,
+        8.0: 2.44, 10.0: 2.75, 12.0: 2.87, 14.0: 3.00, 16.0: 3.25,
+    },
 }
+
+# Compatibilidad: la tabla legacy de 150# vivia con valores ~1/16" por
+# debajo del oficial. Se conserva el nombre como alias de la tabla 150.
+FLANGE_THICKNESS_CLASS_150 = FLANGE_THICKNESS["150"]
+
+
+def get_flange_thickness(nd_inch: float, pressure_class: str) -> float:
+    """Espesor de brida B16.5 segun clase; fallback proporcional si no hay tabla."""
+    table = FLANGE_THICKNESS.get(str(pressure_class or "").strip(), {})
+    if nd_inch in table:
+        return table[nd_inch]
+    return round(max(0.375, nd_inch * 0.12 + 0.25), 3)
 
 
 def get_matching_pipe_od(nd_inch: float) -> float:
@@ -143,11 +161,16 @@ def get_matching_pipe_od(nd_inch: float) -> float:
 
 
 def normalize_pressure_class(raw_class) -> str:
-    """Normaliza la clase de presión a string numérico estándar Plant 3D (ej: '150LBS' o '150#' -> '150')."""
+    """Normaliza la clase de presión a string estándar Plant 3D.
+
+    - '150LBS'/'150#'/'800LBS'/'1000WOG' -> '150'/'150'/'800'/'1000'.
+    - Clases PN ('PN16', 'PN40') se conservan TAL CUAL: no tienen
+      equivalente imperial (distinto taladrado) e inventar '150' seria falso.
+    """
     if not raw_class:
         return "150"
     s = str(raw_class).strip().upper()
-    s = s.replace("LBS", "").replace("#", "").replace("LB", "").replace("CLASS", "").strip()
+    s = s.replace("LBS", "").replace("WOG", "").replace("#", "").replace("LB", "").replace("CLASS", "").strip()
     return s if s else "150"
 
 
@@ -275,27 +298,40 @@ def add_catalog_family(conn, template_dict, family_desc, short_desc, script_name
         end_type_val = item.get("end_type", end_type)
         is_flanged = (end_type_val == "FL")
 
-        # MatchingPipeOd estándar ASME B36.10 para tubería, o OD de tubo para PL
-        if end_type_val == "PL" and item.get("OD"):
-            matching_pipe_od = float(item["OD"])
-        else:
-            matching_pipe_od = get_matching_pipe_od(nd)
+        # MatchingPipeOd SIEMPRE segun ASME B36.10 (como el catalogo oficial):
+        # el OD nominal subescala el tubo real (2" -> 2.0 en vez de 2.375).
+        matching_pipe_od = get_matching_pipe_od(nd)
 
-        # PressureClass normalizada a formato numérico estándar Plant 3D (ej: 150, 300, 600)
+        # PressureClass normalizada (numerica LBS/WOG; PN se conserva tal cual)
         norm_class = normalize_pressure_class(item.get("pressure_class", row_data.get("PressureClass", "150")))
 
-        # Facing y FlangeStd: en bridadas asignar RF y ASME B16.5 por defecto
+        # Facing RF por defecto en bridadas (como el oficial).
         facing_val = item.get("facing")
         if not facing_val and is_flanged:
             facing_val = "RF"
 
+        # FlangeStd: el oficial lo deja VACIO en RF short-pattern; no inventar.
         flange_std_val = item.get("flange_std")
-        if not flange_std_val and is_flanged:
-            flange_std_val = "ASME B16.5"
 
         flange_th_val = item.get("flange_thickness")
         if not flange_th_val and is_flanged:
-            flange_th_val = FLANGE_THICKNESS_CLASS_150.get(nd, round(max(0.375, nd * 0.12 + 0.25), 3))
+            flange_th_val = get_flange_thickness(nd, norm_class)
+
+        # Reseteo de herencia del template: estos campos describen al catalogo
+        # ORIGEN (p. ej. Swagelok) y filtrarian falsos si se heredan tal cual.
+        # Solo se tocan si la columna existe en el schema del template.
+        inherited_resets = {
+            "DesignStd": "",
+            "CompatibleStandard": item.get("compatible_std") or ("ASME B16.10" if is_flanged else ""),
+            "ItemCode": "",
+            "Schedule": None,
+            "WallThickness": None,
+            "EngagementLength": None,
+            "Weight": item.get("weight", 0.0) or 0.0,
+        }
+        for _col, _val in inherited_resets.items():
+            if _col in row_data:
+                row_data[_col] = _val
 
         row_data["NominalDiameter"] = nd
         row_data["NominalUnit"] = "in"
@@ -452,20 +488,23 @@ def load_families_from_json_manifest(conn, templates_dict, manifest_path: Path):
             if not nd or nd <= 0 or nd > 48.0:
                 continue
 
-            l_in = round(it.get("L_mm", 0.0) / 25.4, 4)
+            l_in = round(it["L_mm"] / 25.4, 4)
             if l_in <= 0.0:
                 continue
 
-            d_in = round(it.get("D_mm", 0.0) / 25.4, 4)
-            # If D is missing in a flanged valve, estimate default D based on OD
-            if d_in <= 0.0 and "FLANGED" in script_name:
-                d_in = round(nd * 2.2, 4)
+            # Schema v2: brida (D1 del PDF) y bore (D del PDF) explicitos.
+            # Falla rapido (KeyError) ante JSONs del schema v1 (D_mm).
+            d_flange_in = round(it["D_flange_mm"] / 25.4, 4)
+            d_bore_in = round(it.get("D_bore_mm", 0.0) / 25.4, 4)
+            # If flange OD is missing in a flanged valve, estimate default D based on OD
+            if d_flange_in <= 0.0 and "FLANGED" in script_name:
+                d_flange_in = round(nd * 2.2, 4)
 
-            end_type = "FL" if d_in > 0 else "PL"
+            end_type = "FL" if d_flange_in > 0 else "THDF"
 
             params = {
                 "L": l_in,
-                "D": d_in,
+                "D": d_flange_in,
                 "OD": nd
             }
 
@@ -478,7 +517,8 @@ def load_families_from_json_manifest(conn, templates_dict, manifest_path: Path):
                 "end_type": end_type,
                 "manufacturer": model_data.get("manufacturer", it.get("Manufacturer", "")),
                 "material": it.get("Body_Material", ""),
-                "pressure_class": str(it.get("Class_lbs", ""))
+                "pressure_class": str(it.get("Class_lbs", "")),
+                "weight": round(it.get("Weight_kg", 0.0) * 2.20462, 2),
             })
 
         family_end_type = sizes_list[0]["end_type"] if sizes_list else "FL"
@@ -615,22 +655,18 @@ def load_families_from_spec_json(conn, templates_dict, spec_path: Path):
         nd = convert_dn_to_inch(dn_mm)
         pressure_class = it.get("Class_lbs", 150)
 
-        l_in = round(it.get("L_mm", 0.0) / 25.4, 4)
-        d_in = round(it.get("D_mm", 0.0) / 25.4, 4)
+        l_in = round(it["L_mm"] / 25.4, 4)
+        d_in = round(it["D_flange_mm"] / 25.4, 4)
         h_in = round(it.get("H_mm", 0.0) / 25.4, 4)
         l1_in = round(it.get("L1_mm", 0.0) / 25.4, 4)
         e_in = round(it.get("E_mm", 0.0) / 25.4, 4)
 
         part_num = it.get("Part_Number", f"{model_name}-{nd}-{pressure_class}#")
-        end_type = "FL" if d_in > 0 else "PL"
+        end_type = "FL" if d_in > 0 else "THDF"
 
-        # Template de geometría registrable de alta fidelidad
-        tmpl = it.get("Geometry_Template", "")
-        if not tmpl or tmpl == "BALL_VALVE_2PC_FLANGED":
-            if "K200" in model_name.upper() or "INTEC" in model_name.upper():
-                tmpl = "INTEC_K200_BALL_VALVE"
-            else:
-                tmpl = "BALL_VALVE_2PC_FLANGED"
+        # Template de geometría registrable: viene correcto desde el origen
+        # (catalog-scrap resuelve INTEC_K200_BALL_VALVE por modelo).
+        tmpl = it.get("Geometry_Template", "BALL_VALVE_2PC_FLANGED")
 
         params = {
             "L": l_in,
