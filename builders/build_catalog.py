@@ -70,6 +70,16 @@ DN_TO_INCH_MAP = {
     450: 18.0,
     500: 20.0,
     600: 24.0,
+    650: 26.0,
+    700: 28.0,
+    750: 30.0,
+    800: 32.0,
+    850: 34.0,
+    900: 36.0,
+    950: 38.0,
+    1000: 40.0,
+    1050: 42.0,
+    1200: 48.0,
 }
 
 
@@ -114,6 +124,16 @@ NPS_TO_PIPE_OD = {
     18.0: 18.000,
     20.0: 20.000,
     24.0: 24.000,
+    26.0: 26.000,
+    28.0: 28.000,
+    30.0: 30.000,
+    32.0: 32.000,
+    34.0: 34.000,
+    36.0: 36.000,
+    38.0: 38.000,
+    40.0: 40.000,
+    42.0: 42.000,
+    48.0: 48.000,
 }
 
 # Espesores de brida ASME B16.5 (tf, en pulgadas, con resalte incluido).
@@ -300,7 +320,7 @@ def add_catalog_family(conn, template_dict, family_desc, short_desc, script_name
 
         # MatchingPipeOd SIEMPRE segun ASME B36.10 (como el catalogo oficial):
         # el OD nominal subescala el tubo real (2" -> 2.0 en vez de 2.375).
-        matching_pipe_od = get_matching_pipe_od(nd)
+        matching_pipe_od = item.get("matching_pipe_od") or get_matching_pipe_od(nd)
 
         # PressureClass normalizada (numerica LBS/WOG; PN se conserva tal cual)
         norm_class = normalize_pressure_class(item.get("pressure_class", row_data.get("PressureClass", "150")))
@@ -648,6 +668,84 @@ def load_families_from_spec_json(conn, templates_dict, spec_path: Path):
     items = spec_data.get("plant3d_records") or spec_data.get("plant3d_integration") or spec_data.get("items", [])
     print(f"\n[+] Cargando especificación de alta fidelidad: {mfr} {model_name} ({len(items)} items):\n")
 
+    sample_tmpl = items[0].get("Geometry_Template", "") if items else ""
+    is_support = (
+        "UBOLT" in sample_tmpl or
+        "UBOLT" in model_name.upper() or
+        "B3S" in model_name.upper() or
+        "SUPPORT" in valve_type.upper() or
+        "ABRAZADERA" in valve_type.upper()
+    )
+
+    if is_support:
+        pnp_class_name = "Clamp"
+        category = "Fasteners"
+        skey = "CLMP"
+        end_type = "Universal_ET"
+        template_dict = templates_dict.get(pnp_class_name, templates_dict.get("Coupling"))
+
+        sizes_list = []
+        for it in items:
+            dn_mm = it.get("DN_mm", 15)
+            nd = convert_dn_to_inch(dn_mm)
+            if not nd:
+                nd = round(float(dn_mm) / 25.4, 3)
+
+            pipe_od_in = round(it.get("Pipe_OD_mm", 0.0) / 25.4, 4)
+            a_in = round(it.get("Rod_Diameter_mm", 0.0) / 25.4, 4)
+            b_in = round(it.get("B_Inside_Width_mm", 0.0) / 25.4, 4)
+            c_in = round(it.get("C_Center_Distance_mm", 0.0) / 25.4, 4)
+            d_in = round(it.get("D_Total_Height_mm", 0.0) / 25.4, 4)
+            e_in = round(it.get("E_Leg_Height_mm", 0.0) / 25.4, 4)
+            f_in = round(it.get("F_Thread_Length_mm", 0.0) / 25.4, 4)
+
+            tmpl = it.get("Geometry_Template", "UBOLT_STANDARD")
+            part_num = it.get("Part_Number", f"{model_name}-{nd}")
+
+            params = {
+                "OD": pipe_od_in,
+                "A": a_in,
+                "B": b_in,
+                "C": c_in,
+                "D": d_in,
+                "E": e_in,
+                "F": f_in
+            }
+
+            weight_kg = it.get("Weight_kg", 0.0)
+            weight_lb = round(weight_kg * 2.20462, 2) if weight_kg else 0.0
+
+            sizes_list.append({
+                "nd": nd,
+                "part_num": part_num,
+                "OD": pipe_od_in,
+                "matching_pipe_od": pipe_od_in,
+                "ports_count": 2,
+                "params": params,
+                "end_type": end_type,
+                "weight": weight_lb,
+                "material": it.get("Material", "Acero al carbono / AISI 304 / AISI 316"),
+                "manufacturer": mfr,
+                "pressure_class": "",
+                "facing": "",
+                "flange_std": "",
+                "flange_thickness": 0.0
+            })
+
+        add_catalog_family(
+            conn,
+            template_dict=template_dict,
+            family_desc=f"{mfr} {model_name} {valve_type}".strip(),
+            short_desc=f"{model_name}".strip(),
+            script_name=sample_tmpl or "UBOLT_STANDARD",
+            skey=skey,
+            end_type=end_type,
+            pnp_class=pnp_class_name,
+            category=category,
+            sizes_list=sizes_list
+        )
+        return
+
     families_by_class = {}
 
     for it in items:
@@ -729,6 +827,8 @@ def load_templates_dict(conn=None):
     def load_template(pnp_id):
         cursor.execute("SELECT * FROM EngineeringItems WHERE PnPID = ?;", (pnp_id,))
         row = cursor.fetchone()
+        if not row:
+            return {}
         cols = [c[0] for c in cursor.description]
         return dict(zip(cols, row))
 
@@ -741,6 +841,7 @@ def load_templates_dict(conn=None):
         "Cap": load_template(807),
         "Plug": load_template(1413),
         "ValveBody": load_template(1916),
+        "Clamp": load_template(4) or load_template(2252),
     }
     t_conn.close()
     return res

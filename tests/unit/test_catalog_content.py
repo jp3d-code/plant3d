@@ -32,6 +32,7 @@ def make_db():
         ContentIsoSymbolDefinition TEXT, ContentGeometryTemplate TEXT, Status TEXT);""")
     cur.execute("CREATE TABLE PipeRunComponent (PnPID INTEGER);")
     cur.execute("CREATE TABLE ValveBody (PnPID INTEGER);")
+    cur.execute("CREATE TABLE Clamp (PnPID INTEGER);")
     cur.execute("""CREATE TABLE Port (PnPID INTEGER PRIMARY KEY, SizeRecordId GUID,
         PortName TEXT, NominalDiameter REAL, NominalUnit TEXT, MatchingPipeOd REAL,
         EndType TEXT, FlangeStd TEXT, GasketStd TEXT, Facing TEXT, FlangeThickness REAL,
@@ -171,6 +172,43 @@ class TestAddCatalogFamily(unittest.TestCase):
         ports = cur.fetchall()
         self.assertEqual(len(ports), 1)
         self.assertEqual(ports[0], ("S2", 2.0, "in", 2.375, "FL", "150", "in"))
+
+    def test_ubolt_clamp_family(self):
+        conn = make_db()
+        tmpl_row = dict(template_row())
+        tmpl_row["PartCategory"] = "Fasteners"
+        sizes = [{
+            "nd": 0.5,
+            "part_num": "ITECO-B3S-1-2IN",
+            "OD": 0.8386,
+            "matching_pipe_od": 0.8386,
+            "ports_count": 2,
+            "params": {"OD": 0.8386, "A": 0.25, "B": 0.9449, "C": 1.1811, "D": 2.6378, "E": 2.2441, "F": 2.2047},
+            "end_type": "Universal_ET",
+            "weight": 0.09,
+            "material": "Acero al carbono",
+            "manufacturer": "ITECO SRL",
+            "pressure_class": "",
+            "facing": "",
+            "flange_std": "",
+            "flange_thickness": 0.0,
+        }]
+        bc.add_catalog_family(
+            conn, template_dict=tmpl_row,
+            family_desc="ITECO SRL ITECO B3S Abrazadera U Standard",
+            short_desc="ITECO B3S",
+            script_name="UBOLT_STANDARD", skey="CLMP",
+            end_type="Universal_ET", pnp_class="Clamp", category="Fasteners",
+            sizes_list=sizes,
+        )
+        row = self._row(conn, "ITECO-B3S-1-2IN")
+        self.assertEqual(row["PartCategory"], "Fasteners")
+        self.assertEqual(row["ContentGeometryTemplate"], "UBOLT_STANDARD")
+        self.assertEqual(row["MatchingPipeOd"], 0.8386)
+        self.assertEqual(row["EndType"], "Universal_ET")
+        self.assertIn("OD=0.838600", row["ContentGeometryParamDefinition"])
+        self.assertIn("A=0.250000", row["ContentGeometryParamDefinition"])
+        self.assertIn("C=1.181100", row["ContentGeometryParamDefinition"])
 
 
 if __name__ == "__main__":
