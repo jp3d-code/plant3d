@@ -194,6 +194,17 @@ def normalize_pressure_class(raw_class) -> str:
     return s if s else "150"
 
 
+def sanitize_ascii(text) -> str:
+    """Normaliza a ASCII puro para evitar corrupcion en SQLite Windows.
+
+    Ej: 'Schoneberg' con diéresis -> 'Schoneberg', 'Acero al carbono' intacto.
+    Misma regla que AGENTS.md §5 exige para catalog_title/family_desc.
+    """
+    if text is None:
+        return ""
+    return unicodedata.normalize("NFKD", str(text)).encode("ascii", "ignore").decode("ascii")
+
+
 
 def guid_to_bytes(guid_str=None):
     """Genera un GUID binario de 16 bytes compatible con SQLite de Plant 3D."""
@@ -320,7 +331,8 @@ def add_catalog_family(conn, template_dict, family_desc, short_desc, script_name
 
         # MatchingPipeOd SIEMPRE segun ASME B36.10 (como el catalogo oficial):
         # el OD nominal subescala el tubo real (2" -> 2.0 en vez de 2.375).
-        matching_pipe_od = item.get("matching_pipe_od") or get_matching_pipe_od(nd)
+        # Soportes (.acat) son la unica via para UBOLT/B3S: ver build_support_catalog.py.
+        matching_pipe_od = get_matching_pipe_od(nd)
 
         # PressureClass normalizada (numerica LBS/WOG; PN se conserva tal cual)
         norm_class = normalize_pressure_class(item.get("pressure_class", row_data.get("PressureClass", "150")))
@@ -668,83 +680,21 @@ def load_families_from_spec_json(conn, templates_dict, spec_path: Path):
     items = spec_data.get("plant3d_records") or spec_data.get("plant3d_integration") or spec_data.get("items", [])
     print(f"\n[+] Cargando especificación de alta fidelidad: {mfr} {model_name} ({len(items)} items):\n")
 
+    # Via unica para soportes: build_support_catalog.py (.acat).
+    # Este builder .pcat solo procesa valvulas/cuerpos; rechazar UBOLT/B3S
+    # aqui evita la doble via divergente Clamp(2 puertos/Universal_ET).
     sample_tmpl = items[0].get("Geometry_Template", "") if items else ""
-    is_support = (
-        "UBOLT" in sample_tmpl or
-        "UBOLT" in model_name.upper() or
-        "B3S" in model_name.upper() or
-        "SUPPORT" in valve_type.upper() or
-        "ABRAZADERA" in valve_type.upper()
-    )
-
-    if is_support:
-        pnp_class_name = "Clamp"
-        category = "Fasteners"
-        skey = "CLMP"
-        end_type = "Universal_ET"
-        template_dict = templates_dict.get(pnp_class_name, templates_dict.get("Coupling"))
-
-        sizes_list = []
-        for it in items:
-            dn_mm = it.get("DN_mm", 15)
-            nd = convert_dn_to_inch(dn_mm)
-            if not nd:
-                nd = round(float(dn_mm) / 25.4, 3)
-
-            pipe_od_in = round(it.get("Pipe_OD_mm", 0.0) / 25.4, 4)
-            a_in = round(it.get("Rod_Diameter_mm", 0.0) / 25.4, 4)
-            b_in = round(it.get("B_Inside_Width_mm", 0.0) / 25.4, 4)
-            c_in = round(it.get("C_Center_Distance_mm", 0.0) / 25.4, 4)
-            d_in = round(it.get("D_Total_Height_mm", 0.0) / 25.4, 4)
-            e_in = round(it.get("E_Leg_Height_mm", 0.0) / 25.4, 4)
-            f_in = round(it.get("F_Thread_Length_mm", 0.0) / 25.4, 4)
-
-            tmpl = it.get("Geometry_Template", "UBOLT_STANDARD")
-            part_num = it.get("Part_Number", f"{model_name}-{nd}")
-
-            params = {
-                "OD": pipe_od_in,
-                "A": a_in,
-                "B": b_in,
-                "C": c_in,
-                "D": d_in,
-                "E": e_in,
-                "F": f_in
-            }
-
-            weight_kg = it.get("Weight_kg", 0.0)
-            weight_lb = round(weight_kg * 2.20462, 2) if weight_kg else 0.0
-
-            sizes_list.append({
-                "nd": nd,
-                "part_num": part_num,
-                "OD": pipe_od_in,
-                "matching_pipe_od": pipe_od_in,
-                "ports_count": 2,
-                "params": params,
-                "end_type": end_type,
-                "weight": weight_lb,
-                "material": it.get("Material", "Acero al carbono / AISI 304 / AISI 316"),
-                "manufacturer": mfr,
-                "pressure_class": "",
-                "facing": "",
-                "flange_std": "",
-                "flange_thickness": 0.0
-            })
-
-        add_catalog_family(
-            conn,
-            template_dict=template_dict,
-            family_desc=f"{mfr} {model_name} {valve_type}".strip(),
-            short_desc=f"{model_name}".strip(),
-            script_name=sample_tmpl or "UBOLT_STANDARD",
-            skey=skey,
-            end_type=end_type,
-            pnp_class=pnp_class_name,
-            category=category,
-            sizes_list=sizes_list
+    if (
+        "UBOLT" in sample_tmpl
+        or "UBOLT" in model_name.upper()
+        or "B3S" in model_name.upper()
+        or "SUPPORT" in valve_type.upper()
+        or "ABRAZADERA" in valve_type.upper()
+    ):
+        raise ValueError(
+            f"Spec '{model_name}' parece un soporte (template={sample_tmpl!r}). "
+            "Usa builders/build_support_catalog.py --spec-json <file> para generar el .acat."
         )
-        return
 
     families_by_class = {}
 
@@ -841,7 +791,6 @@ def load_templates_dict(conn=None):
         "Cap": load_template(807),
         "Plug": load_template(1413),
         "ValveBody": load_template(1916),
-        "Clamp": load_template(4) or load_template(2252),
     }
     t_conn.close()
     return res
@@ -870,8 +819,8 @@ def build_single_catalog(catalog_dir=None, output_pcat=None, target_dir=DEFAULT_
         if is_spec:
             raw_mfr = data.get("manufacturer", "Custom")
             raw_mdl = data.get("model", input_path.stem)
-            clean_mfr = unicodedata.normalize('NFKD', raw_mfr).encode('ascii', 'ignore').decode('ascii').replace(" ", "_")
-            clean_mdl = unicodedata.normalize('NFKD', raw_mdl).encode('ascii', 'ignore').decode('ascii').replace(" ", "_")
+            clean_mfr = sanitize_ascii(raw_mfr).replace(" ", "_")
+            clean_mdl = sanitize_ascii(raw_mdl).replace(" ", "_")
             catalog_title = f"{clean_mfr}_{clean_mdl}".strip("_")
             if output_pcat is None:
                 output_pcat = target_dir / f"{catalog_title}_Catalog.pcat"

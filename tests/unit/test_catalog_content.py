@@ -173,42 +173,26 @@ class TestAddCatalogFamily(unittest.TestCase):
         self.assertEqual(len(ports), 1)
         self.assertEqual(ports[0], ("S2", 2.0, "in", 2.375, "FL", "150", "in"))
 
-    def test_ubolt_clamp_family(self):
+    def test_spec_support_rejected_to_acat_builder(self):
+        """Soportes (UBOLT/B3S) ya no entran al .pcat: via unica .acat."""
+        import tempfile
+        import json
         conn = make_db()
-        tmpl_row = dict(template_row())
-        tmpl_row["PartCategory"] = "Fasteners"
-        sizes = [{
-            "nd": 0.5,
-            "part_num": "ITECO-B3S-1-2IN",
-            "OD": 0.8386,
-            "matching_pipe_od": 0.8386,
-            "ports_count": 2,
-            "params": {"OD": 0.8386, "A": 0.25, "B": 0.9449, "C": 1.1811, "D": 2.6378, "E": 2.2441, "F": 2.2047},
-            "end_type": "Universal_ET",
-            "weight": 0.09,
-            "material": "Acero al carbono",
+        spec = {
+            "model": "ITECO B3S",
             "manufacturer": "ITECO SRL",
-            "pressure_class": "",
-            "facing": "",
-            "flange_std": "",
-            "flange_thickness": 0.0,
-        }]
-        bc.add_catalog_family(
-            conn, template_dict=tmpl_row,
-            family_desc="ITECO SRL ITECO B3S Abrazadera U Standard",
-            short_desc="ITECO B3S",
-            script_name="UBOLT_STANDARD", skey="CLMP",
-            end_type="Universal_ET", pnp_class="Clamp", category="Fasteners",
-            sizes_list=sizes,
-        )
-        row = self._row(conn, "ITECO-B3S-1-2IN")
-        self.assertEqual(row["PartCategory"], "Fasteners")
-        self.assertEqual(row["ContentGeometryTemplate"], "UBOLT_STANDARD")
-        self.assertEqual(row["MatchingPipeOd"], 0.8386)
-        self.assertEqual(row["EndType"], "Universal_ET")
-        self.assertIn("OD=0.838600", row["ContentGeometryParamDefinition"])
-        self.assertIn("A=0.250000", row["ContentGeometryParamDefinition"])
-        self.assertIn("C=1.181100", row["ContentGeometryParamDefinition"])
+            "valve_type": "Abrazadera U Standard",
+            "plant3d_records": [{"DN_mm": 15, "Geometry_Template": "UBOLT_STANDARD"}],
+        }
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as f:
+            json.dump(spec, f)
+            spec_path = Path(f.name)
+        try:
+            with self.assertRaises(ValueError) as ctx:
+                bc.load_families_from_spec_json(conn, {"ValveBody": template_row()}, spec_path)
+            self.assertIn("build_support_catalog", str(ctx.exception))
+        finally:
+            spec_path.unlink()
 
 
 if __name__ == "__main__":

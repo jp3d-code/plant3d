@@ -9,10 +9,8 @@ Uso:
     python builders/build_support_catalog.py --spec-json ..\catalog-scrap\output\specifications\ITECO_B3S.json
 """
 
-import os
 import sys
 import json
-import uuid
 import shutil
 import argparse
 from pathlib import Path
@@ -32,9 +30,21 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 try:
-    from builders.build_catalog import get_matching_pipe_od, DN_TO_INCH_MAP
+    from builders.build_catalog import (
+        get_matching_pipe_od,
+        DN_TO_INCH_MAP,
+        guid_to_bytes,
+        get_current_win_filetime,
+        sanitize_ascii,
+    )
 except ImportError:
-    from build_catalog import get_matching_pipe_od, DN_TO_INCH_MAP
+    from build_catalog import (
+        get_matching_pipe_od,
+        DN_TO_INCH_MAP,
+        guid_to_bytes,
+        get_current_win_filetime,
+        sanitize_ascii,
+    )
 
 
 def parse_nps_to_inch(nps_str: str, dn_mm: float = None) -> float:
@@ -96,9 +106,11 @@ def build_support_catalog(
         raise ValueError(f"El archivo {spec_json_path} no contiene 'plant3d_records'.")
 
     model = spec_data.get("model") or meta.get("model", "SUPPORT")
-    model_code = model.replace(" ", "_")
+    model_code = sanitize_ascii(model).replace(" ", "_") or "SUPPORT"
     if not catalog_name:
         catalog_name = f"{model_code}_Supports_Catalog"
+    else:
+        catalog_name = sanitize_ascii(catalog_name).replace(" ", "_") or catalog_name
 
     output_dir.mkdir(parents=True, exist_ok=True)
     out_acat = output_dir / f"{catalog_name}.acat"
@@ -109,14 +121,30 @@ def build_support_catalog(
     conn = sqlite3.connect(out_acat)
     cur = conn.cursor()
 
-    manufacturer = spec_data.get("manufacturer") or meta.get("manufacturer", "Generic")
-    desc = spec_data.get("valve_type") or spec_data.get("description") or meta.get("description", "Pipe Support")
+    manufacturer = sanitize_ascii(
+        spec_data.get("manufacturer") or meta.get("manufacturer", "Generic")
+    ) or "Generic"
+    desc = sanitize_ascii(
+        spec_data.get("valve_type") or spec_data.get("description") or meta.get("description", "Pipe Support")
+    ) or "Pipe Support"
 
     if clear_existing:
-        cur.execute("DELETE FROM EngineeringItems;")
-        cur.execute("DELETE FROM PipeRunComponent;")
-        cur.execute("DELETE FROM Support;")
-        cur.execute("DELETE FROM PnPBase WHERE PnPClassName != 'RepositoryDescriptor';")
+        # Limpieza exhaustiva .acat: ademas de las 3 tablas de datos, borrar
+        # puertos/relaciones huerfanas si existen en la plantilla.
+        for _table in ("EngineeringItems", "PipeRunComponent", "Support",
+                       "Port", "PartPort", "PnPRowRelations"):
+            try:
+                cur.execute(f"DELETE FROM `{_table}`;")
+            except Exception:
+                pass
+        try:
+            cur.execute("DELETE FROM PnPBase WHERE PnPClassName != 'RepositoryDescriptor';")
+        except Exception:
+            pass
+        try:
+            cur.execute("DELETE FROM PnPSys_PnPBase_PnPID;")
+        except Exception:
+            pass
         cur.execute("UPDATE RepositoryDescriptor SET Name = ?, Description = ? WHERE PnPID = 1;",
                     (catalog_name, f"{manufacturer} {model} Support Catalog"))
         conn.commit()
@@ -126,9 +154,9 @@ def build_support_catalog(
         row = cur.fetchone()
         start_pnp_id = (row[0] + 1) if row and row[0] is not None else 2
 
-    family_guid = uuid.uuid4().bytes
-    family_desc = f"{manufacturer} {model} {desc}".strip()
-    short_desc = f"{model}"
+    family_guid = guid_to_bytes()
+    family_desc = sanitize_ascii(f"{manufacturer} {model} {desc}".strip()) or f"{model} Support"
+    short_desc = sanitize_ascii(f"{model}") or "SUPPORT"
     design_std = (spec_data.get("standards", {}).get("manufacturing") or
                   meta.get("standards", {}).get("manufacturing") or
                   meta.get("design_standard", "MSS-SP-58"))
@@ -141,6 +169,7 @@ def build_support_catalog(
         dn_mm = it.get("DN_mm", 15)
         nps_str = it.get("NPS_inch", "")
         nd = parse_nps_to_inch(nps_str, dn_mm)
+        # Contrato unico .acat: MatchingPipeOd SIEMPRE B36.10, OD param = mismo valor.
         pipe_od_in = get_matching_pipe_od(nd)
 
         a_in = round(it.get("Rod_Diameter_mm", 0.0) / 25.4, 4)
@@ -150,12 +179,12 @@ def build_support_catalog(
         e_in = round(it.get("E_Leg_Height_mm", 0.0) / 25.4, 4)
         f_in = round(it.get("F_Thread_Length_mm", 0.0) / 25.4, 4)
 
-        size_desc = f"{family_desc}, {nps_str}".strip(", ")
+        size_desc = sanitize_ascii(f"{family_desc}, {nps_str}".strip(", ")) or family_desc
         param_def = f"OD={pipe_od_in:.6f},A={a_in:.6f},B={b_in:.6f},C={c_in:.6f},D={d_in:.6f},E={e_in:.6f},F={f_in:.6f}"
 
-        guid = uuid.uuid4().bytes
-        size_guid = uuid.uuid4().bytes
-        timestamp = 638000000000000000
+        guid = guid_to_bytes()
+        size_guid = guid_to_bytes()
+        timestamp = get_current_win_filetime()
 
         cur.execute("""
             INSERT INTO PnPBase (PnPID, PnPClassName, PnPStatus, PnPRevision, PnPGuid, PnPTimestamp)
@@ -165,8 +194,9 @@ def build_support_catalog(
         cur.execute("INSERT INTO PipeRunComponent (PnPID) VALUES (?);", (pnp_id,))
         cur.execute("INSERT INTO Support (PnPID, PartSubType) VALUES (?, 'Support');", (pnp_id,))
 
-        weight_kg = it.get("Weight_kg", 0.0)
-        weight_lb = round(weight_kg * 2.20462, 2) if weight_kg else None
+        weight_kg = it.get("Weight_kg", 0.0) or 0.0
+        weight_lb = round(float(weight_kg) * 2.20462, 2)
+        material = sanitize_ascii(it.get("Material", "Carbon Steel")) or "Carbon Steel"
 
         cur.execute("""
             INSERT INTO EngineeringItems (
@@ -188,8 +218,8 @@ def build_support_catalog(
             );
         """, (
             pnp_id, family_guid, family_guid, family_desc,
-            size_desc, short_desc, manufacturer, it.get("Material", "Carbon Steel"),
-            "CS", design_std, design_std, weight_lb, "LB" if weight_lb else None,
+            size_desc, short_desc, manufacturer, material,
+            "CS", design_std, design_std, weight_lb, "LB",
             1, size_guid, "S1", nd,
             "in", pipe_od_in, "Undefined_ET", "in", "Default",
             "P3D", param_def, "TYPE=SUPPORT,SKEY=ANCH",
