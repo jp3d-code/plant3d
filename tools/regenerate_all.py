@@ -142,6 +142,16 @@ def main():
             print(f"[X] Error inyectando soportes en CS150_Soportes.pspc:\n{res.stderr}")
             sys.exit(1)
 
+        # Inyectar válvulas Clase 150 (INTEC K200 y Saidi) a la nueva spec
+        res = subprocess.run(
+            [py, str(REPO_ROOT / "builders" / "build_piping_spec.py"), "--spec-pspc", str(new_spec_proj), "--no-backup"],
+            capture_output=True,
+            text=True
+        )
+        if res.returncode != 0:
+            print(f"[X] Error inyectando válvulas en CS150_Soportes.pspc:\n{res.stderr}")
+            sys.exit(1)
+
         # Copiar también a CPak ASME para disponibilidad global
         cs150_soportes_master = cs150_master.parent / "CS150_Soportes.pspc"
         cs150_soportes_master_x = cs150_master.parent / "CS150_Soportes.pspx"
@@ -149,7 +159,7 @@ def main():
         if new_spec_proj_x.exists():
             shutil.copy2(new_spec_proj_x, cs150_soportes_master_x)
 
-        print(f"      -> {new_spec_proj.name} creada con Tuberías ASME B36.10 + 29 Soportes U-Bolt.")
+        print(f"      -> {new_spec_proj.name} creada con Tuberías ASME B36.10 + Válvulas Clase 150# + 29 Soportes U-Bolt.")
     print("      -> [OK] Nueva spec CS150_Soportes lista para modelado.")
 
     print("\n" + "=" * 70)
